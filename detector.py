@@ -1,16 +1,4 @@
-"""Differentiable deepfake detectors (wav2vec2 features + logistic regression).
 
-Two thin wrappers expose the frozen detector as an ``nn.Module`` so gradients can
-flow back to the input - which is what the gradient-based explainers need:
-
-* :class:`SpectralDetector` - input is ``(magnitude, phase)``; reconstructs the
-  waveform via ISTFT, re-embeds it and scores it. Used by the mask predictor
-  loss and the spectrogram-domain attributions.
-* :class:`WaveformDetector` - input is a raw waveform. Used by waveform-domain
-  attributions.
-
-``build_detector`` wires a :class:`SpectralDetector` for a named setup.
-"""
 
 from __future__ import annotations
 
