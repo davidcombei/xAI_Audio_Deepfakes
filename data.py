@@ -1,15 +1,3 @@
-"""Datasets, metadata I/O and collate functions.
-
-A single :class:`AudioDataset` replaces the ~8 near-identical dataset classes
-that used to live in every script. Metadata files are plain text (one entry per
-line, optionally ``path,label``); the readers here cope with both forms and with
-commas inside paths.
-
-The corpus *finders* at the bottom are only needed to (re)build metadata/subsets
-from the raw MLAAD / M-AILABS trees - they are not used for normal training or
-evaluation on the shipped subsets.
-"""
-
 from __future__ import annotations
 
 import os
@@ -25,22 +13,16 @@ import config
 
 
 def read_lines(path, parse=lambda s: s) -> list:
-    """Read a text file into a list of stripped, parsed lines."""
     with open(path, "r") as f:
         return [parse(line.strip()) for line in f if line.strip()]
 
 
 def read_paths(path) -> list[str]:
-    """Read a metadata file, returning the path field of each line.
 
-    Splits on the *last* comma so paths containing commas survive, and tolerates
-    lines that are just a bare path.
-    """
     return [line.rsplit(",", 1)[0].strip() for line in read_lines(path)]
 
 
 def read_labeled(path) -> tuple[list[str], list[int]]:
-    """Read a ``path,label`` metadata file into ``(paths, labels)``."""
     paths, labels = [], []
     for line in read_lines(path):
         p, label = line.rsplit(",", 1)
@@ -51,12 +33,7 @@ def read_labeled(path) -> tuple[list[str], list[int]]:
 
 
 class AudioDataset(Dataset):
-    """Load waveforms from a list of paths, resolved against an optional root.
 
-    Returns ``(waveform, path)`` where ``path`` is the *original* (unresolved)
-    entry - downstream code uses its basename for naming and ground-truth
-    parsing.
-    """
 
     def __init__(self, paths, audio_processor, root=None, device=None):
         self.paths = list(paths)
@@ -76,7 +53,6 @@ class AudioDataset(Dataset):
 
 
 def collate_features(batch, audio_processor):
-    """-> ``(features, magnitude, phase, paths)``."""
     waveforms, paths = zip(*batch)
     waveforms = torch.stack(waveforms, dim=0)
     _, magnitude, phase = audio_processor.compute_stft(waveforms, has_batch_dim=True)
@@ -85,7 +61,6 @@ def collate_features(batch, audio_processor):
 
 
 def collate_with_logits(batch, audio_processor, logreg):
-    """-> ``(features, magnitude, phase, detector_logits)`` for training."""
     waveforms, _ = zip(*batch)
     waveforms = torch.stack(waveforms, dim=0)
     _, magnitude, phase = audio_processor.compute_stft(waveforms, has_batch_dim=True)
@@ -96,7 +71,6 @@ def collate_with_logits(batch, audio_processor, logreg):
 
 
 def find_wavs(root_dir, max_files: int | None = None) -> list[str]:
-    """Recursively collect ``.wav`` paths under ``root_dir``."""
     out = []
     for dirpath, _, filenames in os.walk(root_dir):
         for f in filenames:
