@@ -1,21 +1,3 @@
-"""Train a deepfake detector on wav2vec2 features (logistic regression or CNN).
-
-Convention follows the original research code: fake = 1, real = 0.
-
-Examples:
-    # Logistic regression on wav2vec2 features (the detector used everywhere):
-    python train_detector.py logreg \
-        --fake metadata/mlaad_selection_metadata.txt \
-        --real metadata/mailabs_selection_metadata.txt \
-        --out ckpts/logReg_ckpts/my_detector.joblib
-
-    # Logistic regression on clean vs. on-the-fly time swaps (the TIMESWAP detector):
-    python train_detector.py timeswap --out ckpts/logReg_ckpts/logReg_timeswap.joblib
-
-    # CNN over log-magnitude spectrograms:
-    python train_detector.py cnn --metadata metadata/ljspeech_manipulated_metadata.txt
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -45,21 +27,18 @@ def compute_eer(y_true, y_scores) -> float:
     return float(brentq(lambda x: 1.0 - x - interp1d(fpr, tpr)(x), 0.0, 1.0))
 
 
-# --------------------------------------------------------------------------- #
-# Logistic regression on mean-pooled wav2vec2 features
-# --------------------------------------------------------------------------- #
+
 def _embed(paths, ap, label, desc):
     feats, labels = [], []
     for path in tqdm(paths, desc=desc, ascii=True):
         audio, _ = ap.load_audio(path)
-        feature = ap.extract_features(audio)  # (frames, D)
+        feature = ap.extract_features(audio) 
         feats.append(feature.mean(0).cpu().numpy())
         labels.append(label)
     return feats, labels
 
 
 def fit_and_save_logreg(X, y, out_path, C=1.0):
-    """Train/evaluate a logistic regression on features and dump it to joblib."""
     print(f"total={len(y)}  fake={int((y == 1).sum())}  real={int((y == 0).sum())}")
     X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     model = LogisticRegression(random_state=42, C=C, max_iter=10000)
@@ -84,8 +63,7 @@ def train_logreg(fake_meta, real_meta, out_path, C=1.0, device=None):
 
 
 def timeswap_features(ap, names, clean_dir=None, vocoded_dir=None, start_sec=3.0, end_sec=5.0):
-    """Extract features for clean clips (label 0) and their on-the-fly 3-5 s
-    time-swapped versions (label 1). Returns ``(X, y)``."""
+
     clean_dir = Path(clean_dir or config.TRAIN_AUDIO_DIR)
     vocoded_dir = Path(vocoded_dir or config.VOCODED_DIR)
     sr = config.SAMPLING_RATE
@@ -115,9 +93,7 @@ def train_logreg_timeswap(out_path, filelist=None, n=5000, C=1e6, device=None):
     fit_and_save_logreg(X, y, out_path, C)
 
 
-# --------------------------------------------------------------------------- #
-# CNN over log-magnitude spectrograms
-# --------------------------------------------------------------------------- #
+
 class _SpecDataset(Dataset):
     def __init__(self, metadata, ap, root):
         self.paths, self.labels = read_labeled(metadata)
