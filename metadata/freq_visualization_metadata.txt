@@ -1,0 +1,8 @@
+LJ004-0082.wav_vocoded_0-1000.wav,1
+LJ004-0082.wav_vocoded_1000-2000.wav,1
+LJ004-0082.wav_vocoded_2000-3000.wav,1
+LJ004-0082.wav_vocoded_3000-4000.wav,1
+LJ004-0082.wav_vocoded_4000-5000.wav,1
+LJ004-0082.wav_vocoded_5000-6000.wav,1
+LJ004-0082.wav_vocoded_6000-7000.wav,1
+LJ004-0082.wav_vocoded_7000-8000.wav,1

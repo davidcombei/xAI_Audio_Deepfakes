@@ -1,0 +1,10 @@
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/fr/Kyutai-TTS/les_mysteres_de_paris_4_11_f000004.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/fr/OpenVoiceV2/monsieur_lecoq_1_09_f000084.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/en/optispeech/wives_and_daughters_56_f000045.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/en/Kani-TTS-370M/dorothy_and_wizard_oz_15_f000085.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/en/tts_models_multilingual_multi-dataset_bark/pink_fairy_book_33_f000034.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/en/tts_models_multilingual_multi-dataset_xtts_v1.1/jane_eyre_33_f000217.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/en/tts_models_multilingual_multi-dataset_xtts_v2/jane_eyre_11_f000033.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/am/Edge-TTS/jane_eyre_38_f000003.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/vi/VieNeu-TTS/poisoned_pen_08_f000052.wav, fake
+/mnt/QNAP/comdav/DATA/DATA/MLAAD/fake/ru/Chatterbox Multilingual/oblomov_s002531.wav, fake

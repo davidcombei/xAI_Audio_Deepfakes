@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Models / checkpoints (large; download or train locally)
+ckpts/
+models/
+pretrained_models/
+
+# Datasets (wav files; large)
+LJSpeech_vocoded22K/
+LJSpeech_hifigan/
+LJSpeech_freq_swap/
+LJSpeech_time_swap/
+mlaad_subset/
+mailabs_subset/
+
+# Generated artefacts
+features/
+npy/
+visualizations/
+runs/
+output/
