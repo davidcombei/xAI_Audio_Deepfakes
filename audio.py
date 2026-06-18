@@ -1,10 +1,4 @@
-"""Audio front-end: loading, STFT/ISTFT and wav2vec2 feature extraction.
 
-The :class:`AudioProcessor` bundles every signal-processing operation the
-pipeline needs and keeps the STFT parameters consistent across training,
-evaluation and visualisation. It pulls all defaults from :mod:`config` and loads
-the (cached) wav2vec2 backbone lazily, so importing this module is cheap.
-"""
 
 from __future__ import annotations
 
@@ -55,7 +49,6 @@ class AudioProcessor:
         return waveform
 
     def load_audio(self, audio_path: str | Path, target_sr: int | None = None):
-        """Load a wav, downmix to mono, resample and pad/crop to a fixed length."""
         target_sr = target_sr or self.sampling_rate
         audio, sr = torchaudio.load(str(audio_path))
         if audio.ndim > 1:
