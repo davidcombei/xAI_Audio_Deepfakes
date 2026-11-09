@@ -58,6 +58,15 @@ class ConvBlock(nn.Module):
 
 
 class UNet(nn.Module):
+    """Mask predictor. Input and output have exactly the spectrogram's size,
+    (B, 1, 513, 313), so the mask can be multiplied bin by bin with the STFT.
+
+    Encoder: each stride-2 conv (padding 1) maps an odd size n to (n + 1) / 2:
+        513 -> 257 -> 129 -> 65 -> 33 (freq),  313 -> 157 -> 79 (time).
+    Decoder: each transposed conv with kernel 3, stride 2, padding 1 maps n to
+    2n - 1, i.e. exactly back to the size of the matching encoder level, so the
+    skip connections line up without cropping or padding.
+    """
 
     def __init__(self):
         super().__init__()
@@ -76,16 +85,16 @@ class UNet(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
         )
 
-        self.up4 = nn.ConvTranspose2d(512, 256, kernel_size=(2, 2), stride=(2, 2))
+        self.up4 = nn.ConvTranspose2d(512, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
         self.d4 = ConvBlock(384, 256)
 
-        self.up3 = nn.ConvTranspose2d(256, 128, kernel_size=(2, 2), stride=(2, 2))
+        self.up3 = nn.ConvTranspose2d(256, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
         self.d3 = ConvBlock(192, 128)
 
-        self.up2 = nn.ConvTranspose2d(128, 64, kernel_size=(2, 1), stride=(2, 1))
+        self.up2 = nn.ConvTranspose2d(128, 64, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         self.d2 = ConvBlock(96, 64)
 
-        self.up1 = nn.ConvTranspose2d(64, 32, kernel_size=(2, 1), stride=(2, 1))
+        self.up1 = nn.ConvTranspose2d(64, 32, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0))
         self.d1 = ConvBlock(33, 32)
 
         self.mask_head = nn.Sequential(
@@ -94,17 +103,17 @@ class UNet(nn.Module):
         )
 
     def forward(self, x):
-        # x: (B, 1, 512, 248)
-        x1 = self.e1(x)
-        x2 = self.e2(x1)
-        x3 = self.e3(x2)
-        x4 = self.e4(x3)
-        b = self.bottleneck(x4)
-        y4 = self.d4(torch.cat([self.up4(b), x3], dim=1))
-        y3 = self.d3(torch.cat([self.up3(y4), x2], dim=1))
-        y2 = self.d2(torch.cat([self.up2(y3), x1], dim=1))
-        y1 = self.d1(torch.cat([self.up1(y2), x], dim=1))
-        return self.mask_head(y1)
+        # x: (B, 1, 513, 313)
+        x1 = self.e1(x)                                       # (B, 32, 257, 313)
+        x2 = self.e2(x1)                                      # (B, 64, 129, 313)
+        x3 = self.e3(x2)                                      # (B, 128, 65, 157)
+        x4 = self.e4(x3)                                      # (B, 256, 33, 79)
+        b = self.bottleneck(x4)                               # (B, 512, 33, 79)
+        y4 = self.d4(torch.cat([self.up4(b), x3], dim=1))     # (B, 256, 65, 157)
+        y3 = self.d3(torch.cat([self.up3(y4), x2], dim=1))    # (B, 128, 129, 313)
+        y2 = self.d2(torch.cat([self.up2(y3), x1], dim=1))    # (B, 64, 257, 313)
+        y1 = self.d1(torch.cat([self.up1(y2), x], dim=1))     # (B, 32, 513, 313)
+        return self.mask_head(y1)                             # (B, 1, 513, 313)
 
 
 def load_mask_predictor(

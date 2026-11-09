@@ -9,9 +9,9 @@ from tqdm import tqdm
 import config
 
 
-SWAP_N_FFT = 1024
-SWAP_HOP = 256
-SWAP_WIN = 1024
+SWAP_N_FFT = config.SWAP_N_FFT
+SWAP_HOP = config.SWAP_HOP
+SWAP_WIN = config.SWAP_WIN
 HIFIGAN_LATENCY = 1330  
 
 

@@ -1,0 +1,7 @@
+time-swapped: 5000 clips, 0.953 of them called fake by the detector (their bona fide clips: 0.031)
+
+               mask  Fidelity (zero fill)  Faithfulness (zero fill)  Fidelity (real fill)  Faithfulness (real fill)   AUC
+      unet-zerofill                 0.996                     0.888                 0.977                     0.772 0.498
+      unet-realfill                 0.953                     0.850                 1.000                     0.889 0.465
+classifier-evidence                 0.953                    -0.044                 0.997                     0.054 0.571
+       ground-truth                 0.953                     0.705                 1.000                     0.897 1.000

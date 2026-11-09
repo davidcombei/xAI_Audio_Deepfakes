@@ -14,6 +14,7 @@ LJSpeech_freq_swap/
 LJSpeech_time_swap/
 mlaad_subset/
 mailabs_subset/
+mailabs_real/
 
 # Generated artefacts
 features/
@@ -21,3 +22,23 @@ npy/
 visualizations/
 runs/
 output/
+
+# Large data / binary artefacts (not code)
+*.zip
+*.wav
+*.npy
+*.npz
+*.pt
+*.joblib
+*.lock
+*~
+1.features/
+0.metadata_model_attribution/
+**/results/**/per_file*.csv
+
+# Logs and local tool settings
+logs/
+*.log
+*.out
+*.err
+.claude/

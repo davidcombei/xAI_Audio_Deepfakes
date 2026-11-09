@@ -1,0 +1,3 @@
+freq-swapped: trained on 36000 clips (32000 fake), tested on 9000 clips (8000 fake) from 1000 held-out utterances
+  C=1.0
+  test: fakes called fake 0.884, bona fide called bona fide 0.897, balanced accuracy 0.891, EER 10.80 %

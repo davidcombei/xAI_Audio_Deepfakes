@@ -1,0 +1,42 @@
+freq-swapped: 40000 clips, 0.885 of them called fake by the detector (their bona fide clips: 0.096)
+
+               mask  Fidelity (zero fill)  Faithfulness (zero fill)  Fidelity (real fill)  Faithfulness (real fill)   AUC
+      unet-zerofill                 0.979                     0.644                 0.369                     0.017 0.497
+      unet-realfill                 0.885                     0.265                 0.986                     0.606 0.509
+classifier-evidence                 0.885                     0.295                 0.886                     0.689 0.622
+       ground-truth                 0.885                    -0.153                 0.779                     0.009 1.000
+
+per swapped band:
+     band                mask  Fidelity (zero fill)  Faithfulness (zero fill)  Fidelity (real fill)  Faithfulness (real fill)   AUC
+   0-1000       unet-zerofill                 1.000                     0.942                 1.000                     0.006 0.624
+1000-2000       unet-zerofill                 0.995                     0.860                 0.312                     0.043 0.473
+2000-3000       unet-zerofill                 0.959                     0.424                 0.311                     0.024 0.430
+3000-4000       unet-zerofill                 0.967                     0.428                 0.308                     0.011 0.477
+4000-5000       unet-zerofill                 0.967                     0.481                 0.264                     0.006 0.464
+5000-6000       unet-zerofill                 0.988                     0.778                 0.130                     0.005 0.449
+6000-7000       unet-zerofill                 0.999                     0.918                 0.210                     0.028 0.505
+7000-8000       unet-zerofill                 0.958                     0.322                 0.420                     0.017 0.557
+   0-1000       unet-realfill                 1.000                     0.983                 1.000                     0.894 0.619
+1000-2000       unet-realfill                 0.993                     0.133                 0.997                     0.777 0.372
+2000-3000       unet-realfill                 0.791                    -0.263                 0.964                     0.415 0.444
+3000-4000       unet-realfill                 0.789                     0.056                 0.972                     0.396 0.484
+4000-5000       unet-realfill                 0.834                     0.139                 0.980                     0.461 0.498
+5000-6000       unet-realfill                 0.967                     0.373                 0.996                     0.726 0.560
+6000-7000       unet-realfill                 0.998                     0.727                 0.999                     0.895 0.539
+7000-8000       unet-realfill                 0.713                    -0.030                 0.977                     0.289 0.556
+   0-1000 classifier-evidence                 1.000                     0.000                 1.000                     0.000 0.590
+1000-2000 classifier-evidence                 0.993                     0.151                 0.993                     0.872 0.587
+2000-3000 classifier-evidence                 0.791                     0.170                 0.797                     0.695 0.578
+3000-4000 classifier-evidence                 0.789                     0.447                 0.789                     0.704 0.642
+4000-5000 classifier-evidence                 0.834                     0.439                 0.834                     0.742 0.625
+5000-6000 classifier-evidence                 0.967                     0.582                 0.967                     0.892 0.665
+6000-7000 classifier-evidence                 0.998                     0.624                 0.998                     0.968 0.685
+7000-8000 classifier-evidence                 0.711                    -0.058                 0.712                     0.641 0.607
+   0-1000        ground-truth                 1.000                     0.000                 1.000                     0.010 1.000
+1000-2000        ground-truth                 0.993                    -0.012                 0.500                     0.009 1.000
+2000-3000        ground-truth                 0.791                    -0.237                 0.516                     0.006 1.000
+3000-4000        ground-truth                 0.789                    -0.284                 0.703                     0.053 1.000
+4000-5000        ground-truth                 0.834                    -0.244                 0.637                    -0.024 1.000
+5000-6000        ground-truth                 0.967                    -0.073                 0.962                     0.068 1.000
+6000-7000        ground-truth                 0.998                    -0.026                 0.993                    -0.005 1.000
+7000-8000        ground-truth                 0.711                    -0.349                 0.920                    -0.042 1.000

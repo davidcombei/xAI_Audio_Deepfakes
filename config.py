@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import torch
@@ -9,6 +9,7 @@ import torch
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 CKPTS_DIR = PROJECT_ROOT / "ckpts"
+CKPTS_DIR_RUNS = PROJECT_ROOT / "runs"
 METADATA_DIR = PROJECT_ROOT / "metadata"
 FEATURES_DIR = PROJECT_ROOT / "features"
 NPY_DIR = PROJECT_ROOT / "npy"
@@ -30,15 +31,25 @@ DEFAULT_DETECTOR_CKPT = CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_TIMESWAP_CO
 
 
 SAMPLING_RATE = 16_000
-N_FFT = 1024
-HOP_LENGTH = 322
-WIN_LENGTH = 644
 N_MELS = 80
-AUDIO_LENGTH = 5  #
+AUDIO_LENGTH = 5  # seconds
 
+# STFT used to make the freq swaps (vocoder.py). The mask pipeline uses the same
+# STFT (window covers the whole FFT, win == n_fft; torch's default rectangular
+# window, as in vocoder.py). The shipped freq swaps are 22.05 kHz files, so after
+# resampling to 16 kHz the bands line up closely, not exactly, with the bins
+# (98-99 % of the fake-real difference falls inside the named band).
+SWAP_N_FFT = 1024
+SWAP_HOP = 256
+SWAP_WIN = 1024
 
-N_FREQ_BINS = N_FFT // 2         
-N_TIME_FRAMES = 248
+N_FFT = SWAP_N_FFT
+HOP_LENGTH = SWAP_HOP
+WIN_LENGTH = SWAP_WIN
+
+# Full spectrogram, nothing cropped: 513 x 313 for a 5 s clip at 16 kHz.
+N_FREQ_BINS = N_FFT // 2 + 1                                        # 513
+N_TIME_FRAMES = 1 + (SAMPLING_RATE * AUDIO_LENGTH) // HOP_LENGTH    # 313
 
 
 
@@ -49,27 +60,56 @@ class Setup:
     name: str
     data_dir: Path
     filelist: Path
-    mask_ckpt: Path
+    mask_ckpt: Path | None
     detector_ckpt: Path
     localization: str | None = None
+    # Use the ground-truth masks of `localization` instead of the U-Net.
+    ground_truth_masks: bool = False
+    # Bona fide clips the fakes were made from (see data.real_path).
+    # Needed for real fill; None = no bona fide reference, only zero fill works.
+    real_dir: Path | None = None
+    # Which wavs in data_dir belong to this setup (used by train_mask.py).
+    file_pattern: str = "*.wav"
 
 
+# NOTE: the mask_ckpt U-Nets below were trained on the old 512 x 248 STFT
+# (n_fft 1024, hop 322, win 644) with the old decoder. They do not load into the
+# current UNet; retrain with train_mask.py and point mask_ckpt to the new files.
 SETUPS: dict[str, Setup] = {
     "realistic": Setup(
         name="realistic",
         data_dir=PROJECT_ROOT / "mlaad_subset",
-        filelist=METADATA_DIR / "realistic-subset.txt",
-        mask_ckpt=CKPTS_DIR / "ckpts_realisticDeepfakes" / "UNet_MP_epoch_41_loss_0.3316.pth",
+        # The 27171 files the U-Net in runs/realistic_realfill was trained on
+        # (every wav in mlaad_subset/, each one has an M-AILABS clip in mailabs_real/).
+        filelist=METADATA_DIR / "realistic-all.txt",
+        mask_ckpt=CKPTS_DIR_RUNS / "realistic_realfill" / "UNet_MP_epoch_380_loss_0.2463.pth",
         detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_MLAAD_M-AILabs.joblib",
         localization=None,
+        # Links to the M-AILABS clips, made by link_mailabs_reals.py. These clips are
+        # not time-aligned with the fakes (see masking.py).
+        real_dir=PROJECT_ROOT / "mailabs_real",
     ),
     "freq-swapped": Setup(
         name="freq-swapped",
         data_dir=PROJECT_ROOT / "LJSpeech_freq_swap",
-        filelist=METADATA_DIR / "freq-swap-subset.txt",
-        mask_ckpt=CKPTS_DIR / "ckpts_freqSwapDeepfakes" / "UNet_MP_epoch_74_loss_0.0182.pth",
+        filelist=METADATA_DIR / "freq-swap-all.txt",  # all 40000 swaps (8 bands x 5000 clips)
+       # mask_ckpt=CKPTS_DIR / "ckpts_freqSwapDeepfakes" / "UNet_MP_epoch_74_loss_0.0182.pth",
+        mask_ckpt = CKPTS_DIR / "ckpts_freqSwapFull_real-fill" / "UNet_MP_epoch_100_loss_0.2609.pth",
         detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_anyband_controlled.joblib",
         localization="freq",
+        real_dir=TRAIN_AUDIO_DIR,
+    ),
+    # Only the clips whose 1-2 kHz band was swapped, with a detector trained on
+    # that band alone.
+    "freq-swapped-single": Setup(
+        name="freq-swapped-single",
+        data_dir=PROJECT_ROOT / "LJSpeech_freq_swap",
+        filelist=METADATA_DIR / "freq-swap-single-all.txt",  # all 5000 1-2 kHz swaps
+        mask_ckpt=CKPTS_DIR/ "ckpts_singleFreqSwap_real-fill" / "UNet_MP_epoch_99_loss_0.2838.pth",  
+        detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_1-2kHz_controlled.joblib",
+        localization="freq",
+        real_dir=TRAIN_AUDIO_DIR,
+        file_pattern="*_vocoded_1000-2000.wav",
     ),
     "time-swapped": Setup(
         name="time-swapped",
@@ -78,8 +118,18 @@ SETUPS: dict[str, Setup] = {
         mask_ckpt=CKPTS_DIR / "ckpts_timeSwapDeepfakes_CORRECTED" / "UNet_MP_epoch_173_loss_0.3314.pth",
         detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_TIMESWAP_CORRECTED.joblib",
         localization="time",
+        real_dir=TRAIN_AUDIO_DIR,
     ),
 }
+
+# Oracle baselines: the swap setups with the U-Net replaced by the known
+# manipulated region, i.e. what a perfect mask predictor would score.
+SETUPS["ground_truth_frequency"] = replace(
+    SETUPS["freq-swapped"], name="ground_truth_frequency", mask_ckpt=None, ground_truth_masks=True
+)
+SETUPS["ground_truth_time"] = replace(
+    SETUPS["time-swapped"], name="ground_truth_time", mask_ckpt=None, ground_truth_masks=True
+)
 
 SETUP_NAMES = tuple(SETUPS)
 
@@ -94,9 +144,12 @@ def get_setup(name: str) -> Setup:
 
 
 def setup_key(setup) -> str:
-    """Short key used in output filenames: 'realistic' / 'freq' / 'time'."""
+    """Short key used in output filenames: 'realistic' / 'freq' / 'freq-single' / 'time'."""
     name = setup.name if isinstance(setup, Setup) else setup
-    return name.split("-")[0]
+    key = name.split("-")[0]
+    if name.endswith("-single"):
+        key = key + "-single"
+    return key
 
 
 def masked_features_dir(setup) -> Path:

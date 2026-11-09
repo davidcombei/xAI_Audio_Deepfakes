@@ -72,7 +72,12 @@ class AudioProcessor:
     def compute_stft(
         self, waveform: torch.Tensor, has_batch_dim: bool = True, logscale: bool = False
     ):
+        """Full complex STFT, nothing cropped.
 
+        waveform (80000,) -> (513, 313);  (batch, 80000) -> (batch, 513, 313)
+        Returns (complex STFT, magnitude, phase). `has_batch_dim` is kept so old
+        callers still work; the shape follows the input.
+        """
         if waveform.dim() == 1:
             waveform = self._fit_length(waveform, dim=0).to(self.device)
         elif waveform.dim() == 2:
@@ -87,11 +92,6 @@ class AudioProcessor:
             win_length=self.win_length,
             return_complex=True,
         )
-  
-        if has_batch_dim:
-            X_stft = X_stft[:, :-1, :-1]
-        else:
-            X_stft = X_stft[:-1, :-1]
 
         magnitude = X_stft.abs()
         phase = X_stft.angle()
@@ -100,23 +100,9 @@ class AudioProcessor:
         return X_stft, magnitude, phase
 
     def compute_invert_stft(self, spectrogram: torch.Tensor) -> torch.Tensor:
-  
+        """Inverse of compute_stft: (batch, 513, 313) complex -> (batch, 80000)."""
         if not torch.is_complex(spectrogram):
             raise ValueError("ISTFT expects complex input!")
-
-        if spectrogram.shape[1] == config.N_FREQ_BINS: 
-            pad = torch.zeros(
-                spectrogram.shape[0], 1, spectrogram.shape[2],
-                dtype=spectrogram.dtype, device=spectrogram.device,
-            )
-            spectrogram = torch.cat([spectrogram, pad], dim=1)
-
-        if spectrogram.shape[2] == config.N_TIME_FRAMES: 
-            pad = torch.zeros(
-                spectrogram.shape[0], spectrogram.shape[1], 1,
-                dtype=spectrogram.dtype, device=spectrogram.device,
-            )
-            spectrogram = torch.cat([spectrogram, pad], dim=2)
 
         return torch.istft(
             spectrogram,

@@ -52,6 +52,71 @@ class AudioDataset(Dataset):
 
 
 
+def utterance_id(path) -> str:
+    """'LJSpeech_freq_swap/LJ001-0001.wav_vocoded_0-1000.wav' -> 'LJ001-0001'."""
+    file_name = Path(path).name
+    return file_name[:10]
+
+
+def real_path(fake_path, real_dir) -> Path:
+    """Path of the bona fide clip a fake clip was made from.
+
+    LJSpeech swaps: the utterance id, 'LJ001-0001.wav_vocoded_0-1000.wav' -> 'LJ001-0001.wav'.
+    MLAAD fakes: the M-AILABS clip has the same file name as the fake.
+    """
+    file_name = Path(fake_path).name
+    if file_name.startswith("LJ"):
+        return Path(real_dir) / (utterance_id(fake_path) + ".wav")
+    return Path(real_dir) / file_name
+
+
+class FakeAndRealDataset(Dataset):
+    """Returns ``(fake waveform, bona fide waveform, fake path)`` for each fake clip.
+
+    The bona fide clip is found with ``real_path`` (used by real fill).
+    If ``real_dir`` is None (no bona fide reference, zero fill only) the
+    "bona fide waveform" is all zeros and is never used.
+    The waveforms stay on the CPU so DataLoader worker processes can load them.
+    """
+
+    def __init__(self, paths, audio_processor, root=None, real_dir=None):
+        self.paths = list(paths)
+        self.ap = audio_processor
+        self.root = Path(root) if root is not None else None
+        self.real_dir = real_dir
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        full = self.root / path if self.root is not None else path
+        fake, _ = self.ap.load_audio(full)                                    # (80000,)
+        if self.real_dir is None:
+            real = torch.zeros_like(fake)                                     # (80000,)
+        else:
+            real, _ = self.ap.load_audio(real_path(path, self.real_dir))      # (80000,)
+        return fake, real, path
+
+
+def collate_fake_and_real(batch):
+    """Stack a list of dataset items into ``(fakes, reals, paths)``."""
+    fakes = []
+    reals = []
+    paths = []
+    for fake, real, path in batch:
+        fakes.append(fake)
+        reals.append(real)
+        paths.append(path)
+    return torch.stack(fakes), torch.stack(reals), paths  # (batch, 80000), (batch, 80000), list
+
+
+def one_thread_per_worker(worker_id):
+    """Resampling runs on the CPU; one thread per DataLoader worker avoids
+    oversubscribing the CPU when several GPU processes each start workers."""
+    torch.set_num_threads(1)
+
+
 def collate_features(batch, audio_processor):
     waveforms, paths = zip(*batch)
     waveforms = torch.stack(waveforms, dim=0)

@@ -1,0 +1,33 @@
+freq-swapped: 80000 clips, 1.000 of them called fake by the detector
+
+         mask  Fidelity (zero fill)  Faithfulness (zero fill)  Fidelity (real fill)  Faithfulness (real fill)   AUC
+unet-realfill                 1.000                     0.010                 1.000                     0.988 0.759
+unet-zerofill                 1.000                     1.000                 0.259                     0.000 0.503
+ ground-truth                 0.757                     0.001                 0.994                     0.144 1.000
+
+per swapped band:
+     band          mask  Fidelity (zero fill)  Faithfulness (zero fill)  Fidelity (real fill)  Faithfulness (real fill)   AUC
+   0-1000 unet-realfill                 1.000                     0.000                 1.000                     0.987 0.712
+1000-2000 unet-realfill                 1.000                     0.000                 1.000                     0.991 0.753
+2000-3000 unet-realfill                 1.000                     0.002                 1.000                     0.989 0.746
+3000-4000 unet-realfill                 1.000                     0.000                 1.000                     0.989 0.787
+4000-5000 unet-realfill                 1.000                     0.001                 1.000                     0.983 0.775
+5000-6000 unet-realfill                 1.000                     0.023                 1.000                     0.982 0.753
+6000-7000 unet-realfill                 1.000                     0.027                 1.000                     0.988 0.761
+7000-8000 unet-realfill                 1.000                     0.025                 1.000                     0.991 0.786
+   0-1000 unet-zerofill                 1.000                     1.000                 1.000                     0.000 0.750
+1000-2000 unet-zerofill                 1.000                     1.000                 0.686                     0.001 0.553
+2000-3000 unet-zerofill                 1.000                     1.000                 0.253                     0.000 0.423
+3000-4000 unet-zerofill                 1.000                     1.000                 0.052                     0.000 0.508
+4000-5000 unet-zerofill                 1.000                     1.000                 0.022                     0.000 0.495
+5000-6000 unet-zerofill                 1.000                     1.000                 0.020                     0.000 0.424
+6000-7000 unet-zerofill                 1.000                     1.000                 0.017                     0.000 0.415
+7000-8000 unet-zerofill                 1.000                     1.000                 0.023                     0.001 0.460
+   0-1000  ground-truth                 1.000                     0.000                 1.000                     0.000 1.000
+1000-2000  ground-truth                 1.000                     0.000                 0.996                     0.057 1.000
+2000-3000  ground-truth                 1.000                     0.000                 0.995                     0.172 1.000
+3000-4000  ground-truth                 0.987                     0.000                 0.998                     0.249 1.000
+4000-5000  ground-truth                 0.760                     0.000                 0.996                     0.080 1.000
+5000-6000  ground-truth                 0.752                     0.000                 0.999                     0.079 1.000
+6000-7000  ground-truth                 0.280                     0.000                 0.995                     0.035 1.000
+7000-8000  ground-truth                 0.276                     0.010                 0.973                     0.481 1.000

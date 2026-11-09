@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
 
 import config
+from masking import keep_masked_part, remove_masked_part
 
 EPS = 1e-10
 
@@ -74,14 +75,23 @@ GROUND_TRUTH = {"freq": ground_truth_freq, "time": ground_truth_time}
 
 
 
+def detector_logits(detector, spectrogram):
+    """Detector logit of a complex spectrogram (batch, 513, 313) -> (batch,)."""
+    return detector(spectrogram.abs(), spectrogram.angle())
+
+
 class FidelityEvaluator:
-    def __init__(self, detector):
+    """Share of clips where keeping only the masked part keeps the decision."""
+
+    def __init__(self, detector, fill="real"):
         self.detector = detector
+        self.fill = fill
         self.scores = []
 
-    def evaluate_batch(self, mask, *, magnitude, phase, audio_path=None):
-        pred_orig = self.detector(magnitude, phase) > 0
-        pred_masked = self.detector(magnitude * mask, phase) > 0
+    def evaluate_batch(self, mask, *, x_fake, x_real, audio_path=None):
+        kept = keep_masked_part(mask, x_fake, x_real, self.fill)
+        pred_orig = detector_logits(self.detector, x_fake) > 0
+        pred_masked = detector_logits(self.detector, kept) > 0
         self.scores.extend((pred_orig == pred_masked).float().cpu().numpy())
 
     def results(self):
@@ -89,13 +99,17 @@ class FidelityEvaluator:
 
 
 class FaithfulnessEvaluator:
-    def __init__(self, detector):
+    """Mean of p_fake(original) - p_fake(masked part removed)."""
+
+    def __init__(self, detector, fill="real"):
         self.detector = detector
+        self.fill = fill
         self.scores = []
 
-    def evaluate_batch(self, mask, *, magnitude, phase, audio_path=None):
-        pred_orig = torch.sigmoid(self.detector(magnitude, phase))
-        pred_masked = torch.sigmoid(self.detector(magnitude * (1 - mask), phase))
+    def evaluate_batch(self, mask, *, x_fake, x_real, audio_path=None):
+        removed = remove_masked_part(mask, x_fake, x_real, self.fill)
+        pred_orig = torch.sigmoid(detector_logits(self.detector, x_fake))
+        pred_masked = torch.sigmoid(detector_logits(self.detector, removed))
         self.scores.extend((pred_orig - pred_masked).cpu().numpy())
 
     def results(self):
@@ -104,13 +118,15 @@ class FaithfulnessEvaluator:
 
 class AverageDropIncreaseGain:
 
-    def __init__(self, detector):
+    def __init__(self, detector, fill="real"):
         self.detector = detector
+        self.fill = fill
         self.clean, self.relevant = [], []
 
-    def evaluate_batch(self, mask, *, magnitude, phase, audio_path=None):
-        self.clean.append(torch.sigmoid(self.detector(magnitude, phase)).detach())
-        self.relevant.append(torch.sigmoid(self.detector(magnitude * mask, phase)).detach())
+    def evaluate_batch(self, mask, *, x_fake, x_real, audio_path=None):
+        kept = keep_masked_part(mask, x_fake, x_real, self.fill)
+        self.clean.append(torch.sigmoid(detector_logits(self.detector, x_fake)).detach())
+        self.relevant.append(torch.sigmoid(detector_logits(self.detector, kept)).detach())
 
     def results(self):
         clean = torch.cat(self.clean)
@@ -122,17 +138,41 @@ class AverageDropIncreaseGain:
         }
 
 
+def relevance_mass_accuracy(attribution, true) -> float:
+    """Relevance mass accuracy (Arras et al., 2022): share of total relevance inside the ground truth.
+
+    Uses |attribution| so signed gradient attributions (input-x-gradient, gradient-shap) count
+    by magnitude; for non-negative masks this is a no-op. The map is deliberately NOT min-max
+    scaled: RMA is not shift-invariant, and scaling would zero out the smallest bin.
+    Chance level = fraction of bins inside the ground truth.
+    """
+    a = np.abs(np.asarray(attribution, dtype=np.float64))
+    total = a.sum()
+    if total <= 0:
+        return float("nan")
+    return float(a[np.asarray(true, dtype=bool)].sum() / total)
+
+
 class LocalizationEvaluator:
 
     def __init__(self, localization_kind: str):
         self.get_true = GROUND_TRUTH[localization_kind]
         self.aucs = []
+        self.rmas = []
+        self.chances = []
 
-    def evaluate_batch(self, pred, *, magnitude, phase, audio_path):
+    def evaluate_batch(self, pred, *, x_fake=None, x_real=None, audio_path):
         for i in range(pred.shape[0]):
             true = self.get_true(audio_path[i], pred[i].shape).cpu().numpy()
-            pred_img = min_max_scale(pred[i].cpu().numpy())
+            pred_np = pred[i].cpu().numpy()
+            pred_img = min_max_scale(pred_np)
             self.aucs.append(roc_auc_score(true.flatten(), pred_img.flatten()))
+            self.rmas.append(relevance_mass_accuracy(pred_np, true))
+            self.chances.append(float(true.mean()))
 
     def results(self):
-        return {"Localization": float(np.mean(self.aucs))}
+        return {
+            "Localization": float(np.mean(self.aucs)),
+            "Localization RMA": float(np.nanmean(self.rmas)),
+            "Localization RMA (chance)": float(np.mean(self.chances)),
+        }

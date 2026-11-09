@@ -7,8 +7,10 @@ import torch
 
 import config
 from audio import AudioProcessor
-from data import read_paths
-from models import TorchLogReg, load_mask_predictor
+from data import read_paths, real_path
+from explainers import build_mask_predictor
+from masking import keep_masked_part, remove_masked_part
+from models import TorchLogReg
 from viz import plot_mask, plot_spectrogram
 
 if isinstance(torch.classes, types.ModuleType):
@@ -22,25 +24,30 @@ def load_pipeline(setup_name: str):
     setup = config.get_setup(setup_name)
     device = config.get_device()
     ap = AudioProcessor(device=device)
-    model = load_mask_predictor(setup.mask_ckpt, device)
+    predict_mask = build_mask_predictor(setup, device)
     logreg = TorchLogReg(setup.detector_ckpt).to(device)
     paths = read_paths(setup.filelist)
-    return setup, ap, model, logreg, paths
+    return setup, ap, predict_mask, logreg, paths
 
 
 @torch.no_grad()
-def explain(ap, model, logreg, path):
+def explain(setup, ap, predict_mask, logreg, path):
     wave, _ = ap.load_audio(config.PROJECT_ROOT / path)
     wave = wave.to(ap.device)
-    _, mag, phase = ap.compute_stft(wave.unsqueeze(0), has_batch_dim=True)
+    x_fake, mag, _ = ap.compute_stft(wave.unsqueeze(0))   # (1, 513, 313)
 
-    mask = model(mag.unsqueeze(1)).squeeze(1)              # (1, F, T)
-    Tmax = mask.shape[1]
-    mag, phase = mag[:, :Tmax, :], phase[:, :Tmax, :]
-    spec_phase = torch.exp(1j * phase)
+    # real fill when the setup has bona fide reference clips, else zero fill
+    if setup.real_dir is not None:
+        fill = "real"
+        real_wave, _ = ap.load_audio(real_path(path, setup.real_dir))
+        x_real, _, _ = ap.compute_stft(real_wave.to(ap.device).unsqueeze(0))
+    else:
+        fill = "zero"
+        x_real = None
 
-    rel_wave = ap.compute_invert_stft((mask * mag) * spec_phase)
-    irr_wave = ap.compute_invert_stft(((1 - mask) * mag) * spec_phase)
+    mask = predict_mask(mag, [path])                       # (1, 513, 313)
+    rel_wave = ap.compute_invert_stft(keep_masked_part(mask, x_fake, x_real, fill))
+    irr_wave = ap.compute_invert_stft(remove_masked_part(mask, x_fake, x_real, fill))
 
     def prob(w):
         if w.ndim == 1:
@@ -62,14 +69,14 @@ def explain(ap, model, logreg, path):
 st.title("ADDvisor - explaining audio deepfake detection")
 
 setup_name = st.sidebar.selectbox("Setup", config.SETUP_NAMES)
-setup, ap, model, logreg, paths = load_pipeline(setup_name)
+setup, ap, predict_mask, logreg, paths = load_pipeline(setup_name)
 n = st.sidebar.slider("Clips to show", 1, min(50, len(paths)), 5)
 st.sidebar.caption(f"{len(paths)} clips available in `{setup.filelist.name}`")
 st.sidebar.caption("Prediction = detector probability of class 1.")
 
 for path in paths[:n]:
     st.subheader(path)
-    out = explain(ap, model, logreg, path)
+    out = explain(setup, ap, predict_mask, logreg, path)
 
     a, b = st.columns(2)
     a.markdown("**Original**")
