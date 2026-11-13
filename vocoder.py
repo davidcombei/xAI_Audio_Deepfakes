@@ -75,29 +75,3 @@ def generate_freq_swaps(
             torchaudio.save(str(out), wav.unsqueeze(0).cpu(), sr)
 
 
-def generate_time_swaps(
-    orig_dir=None, vocoded_dir=None, out_dir=None, file_list=None, *,
-    start_sec: float = 3.0, end_sec: float = 5.0, sr: int = config.SAMPLING_RATE,
-):
-    from audio import AudioProcessor
-    from data import read_lines
-
-    orig_dir = Path(orig_dir or config.TRAIN_AUDIO_DIR)
-    vocoded_dir = Path(vocoded_dir or config.VOCODED_DIR)
-    out_dir = Path(out_dir or config.SETUPS["time-swapped"].data_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    if file_list is None:
-        file_list = read_lines(config.METADATA_DIR / "LJSpeech.txt")
-
-    ap = AudioProcessor(device="cpu")
-    start, end = int(start_sec * sr), int(end_sec * sr)
-    for name in tqdm(file_list, ascii=True, desc="time swaps"):
-        out_path = out_dir / name
-        if out_path.exists():
-            continue
-        clean = ap.load_audio(orig_dir / name)[0]
-        voc = ap.load_audio(vocoded_dir / f"{name}_vocoded.wav")[0]
-        mixed = clean.clone()
-        hi = min(end, mixed.shape[-1])
-        mixed[start:hi] = voc[start:hi]
-        torchaudio.save(str(out_path), mixed.unsqueeze(0), sr)

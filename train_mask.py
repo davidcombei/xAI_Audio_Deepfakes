@@ -1,8 +1,11 @@
 """Train the U-Net mask predictor with the LMAC loss.
 
 By default the masked-out bins are filled with the bona fide clip the fake was
-made from ("real fill", see masking.py); --fill zero gives the original
-zero-masking loss. The U-Net only sees the fake clip's 513 x 313 STFT magnitude;
+made from ("real fill", see masking.py); --fill avg fills them with the setup's
+average spectrogram (run compute_avg_spectrogram.py first); --fill avgreal with the
+average bona fide spectrogram (compute_avg_spectrogram.py --source real); --fill optimized with
+the fill optimised to be neutral for the setup's detector (learn_neutral_fill.py); --fill zero gives the
+original zero-masking loss. The U-Net only sees the fake clip's 513 x 313 STFT magnitude;
 the bona fide clip is only used inside the loss. Train on all files of the setup.
 
 Run from the repo root, e.g. on GPUs 0-4:
@@ -26,7 +29,7 @@ import config
 from audio import AudioProcessor
 from data import FakeAndRealDataset, collate_fake_and_real, one_thread_per_worker, read_paths
 from losses import LMACLoss
-from masking import FILLS, check_fill
+from masking import FILLS, check_fill, fill_spectrogram, load_fill_reference
 from models import UNet, TorchLogReg
 
 # The loss backprops through the frozen wav2vec2 via ISTFT features; the math
@@ -92,7 +95,6 @@ def train(setup, *, fill="real", filelist=None, data_dir=None, epochs=1000, batc
 
     opt_model = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # Resume from the last finished epoch (also works with a different number of GPUs).
     state_path = out_dir / "last_state.pt"
     start_epoch = 0
     if resume and state_path.exists():
@@ -121,6 +123,7 @@ def train(setup, *, fill="real", filelist=None, data_dir=None, epochs=1000, batc
             raise FileNotFoundError(f"no files matching {setup.file_pattern!r} under {data_dir}")
         root = data_dir
     real_dir = setup.real_dir if fill == "real" else None
+    reference = load_fill_reference(setup, fill, device)
     dataset = FakeAndRealDataset(names, ap, root=root, real_dir=real_dir)
     loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fake_and_real,
@@ -146,6 +149,7 @@ def train(setup, *, fill="real", filelist=None, data_dir=None, epochs=1000, batc
             with torch.no_grad():
                 x_fake, _, _ = ap.compute_stft(fakes)   # (batch, 513, 313) complex
                 x_real, _, _ = ap.compute_stft(reals)   # (batch, 513, 313) complex
+                x_real = fill_spectrogram(fill, reference, x_fake, x_real)
 
             mask = model(x_fake.abs().unsqueeze(1))     # (batch, 1, 513, 313)
             loss_value, parts, weights = loss_fn.loss_function(
@@ -180,10 +184,14 @@ def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--setup", choices=config.SETUP_NAMES, required=True)
     p.add_argument("--fill", choices=FILLS, default="real",
-                   help="real = fill masked-out bins from the bona fide clip; zero = original loss")
+                   help="real = fill masked-out bins from the bona fide clip; avg = from the setup's "
+                        "average spectrogram (compute_avg_spectrogram.py); avgreal = from the average bona fide "
+                        "spectrogram (compute_avg_spectrogram.py --source real); optimized = from the fill "
+                        "optimised to be neutral for the setup's detector (learn_neutral_fill.py); "
+                        "zero = original loss")
     p.add_argument("--filelist", default=None, help="metadata file; default = all wavs of the setup in the data dir")
     p.add_argument("--data-dir", default=None, help="override the setup's data directory")
-    p.add_argument("--epochs", type=int, default=1000)
+    p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch-size", type=int, default=15)
     p.add_argument("--lr", type=float, default=3e-5)
     p.add_argument("--out-dir", default=None, help="default: runs/<setup>_<fill>fill")

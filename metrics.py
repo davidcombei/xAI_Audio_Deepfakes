@@ -53,25 +53,29 @@ def min_max_scale(x):
     return (x - x_min) / (x_max - x_min)
 
 
-def ground_truth_freq(audio_path, shape) -> torch.Tensor:
+# Extra margin for "RMA (+50 Hz)": the swap's filter edges leak a little energy past the band,
+# so this ground truth is the band widened by 50 Hz on each side (cut at 0 Hz and 8 kHz).
+BOUNDARY_HZ = 50
+
+
+def ground_truth_freq(audio_path, shape, margin_hz=0) -> torch.Tensor:
+    """1 inside the swapped band (from the file name, e.g. '..._1000-2000.wav'), 0 elsewhere.
+
+    margin_hz widens the band on both sides: band 1000-2000 with margin_hz=50 -> 950-2050 Hz.
+    """
     n_freq, n_time = shape
     name = os.path.splitext(os.path.basename(str(audio_path)))[0]
     *_, band = name.split("_")
     f_low, f_high = (int(x) for x in band.split("-"))
     f_max = config.SAMPLING_RATE / 2
+    f_low = max(f_low - margin_hz, 0)
+    f_high = min(f_high + margin_hz, f_max)
     mask = torch.zeros((n_freq, n_time))
     mask[int(f_low / f_max * n_freq):int(f_high / f_max * n_freq)] = 1.0
     return mask
 
 
-def ground_truth_time(audio_path, shape) -> torch.Tensor:
-    n_freq, n_time = shape
-    mask = torch.zeros((n_freq, n_time))
-    mask[:, int(3 / 5 * n_time):] = 1.0
-    return mask
-
-
-GROUND_TRUTH = {"freq": ground_truth_freq, "time": ground_truth_time}
+GROUND_TRUTH = {"freq": ground_truth_freq}
 
 
 
@@ -156,10 +160,14 @@ def relevance_mass_accuracy(attribution, true) -> float:
 class LocalizationEvaluator:
 
     def __init__(self, localization_kind: str):
+        self.localization_kind = localization_kind
         self.get_true = GROUND_TRUTH[localization_kind]
         self.aucs = []
         self.rmas = []
         self.chances = []
+        # frequency setups only: RMA with the band widened by BOUNDARY_HZ on each side
+        self.rmas_boundary = []
+        self.chances_boundary = []
 
     def evaluate_batch(self, pred, *, x_fake=None, x_real=None, audio_path):
         for i in range(pred.shape[0]):
@@ -169,10 +177,18 @@ class LocalizationEvaluator:
             self.aucs.append(roc_auc_score(true.flatten(), pred_img.flatten()))
             self.rmas.append(relevance_mass_accuracy(pred_np, true))
             self.chances.append(float(true.mean()))
+            if self.localization_kind == "freq":
+                true_wide = ground_truth_freq(audio_path[i], pred[i].shape, BOUNDARY_HZ).cpu().numpy()
+                self.rmas_boundary.append(relevance_mass_accuracy(pred_np, true_wide))
+                self.chances_boundary.append(float(true_wide.mean()))
 
     def results(self):
-        return {
+        results = {
             "Localization": float(np.mean(self.aucs)),
             "Localization RMA": float(np.nanmean(self.rmas)),
             "Localization RMA (chance)": float(np.mean(self.chances)),
         }
+        if self.rmas_boundary:
+            results[f"Localization RMA +{BOUNDARY_HZ}Hz"] = float(np.nanmean(self.rmas_boundary))
+            results[f"Localization RMA +{BOUNDARY_HZ}Hz (chance)"] = float(np.mean(self.chances_boundary))
+        return results

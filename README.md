@@ -14,7 +14,7 @@ The pipeline is studied under three **setups**:
 |-----------------|-----------------------------------|---------------------------------------|
 | `realistic`     | `mlaad_subset/`                   | real-world TTS deepfakes (MLAAD)      |
 | `freq-swapped`  | `LJSpeech_freq_swap/`             | one 1 kHz band replaced by a vocoder  |
-| `time-swapped`  | `LJSpeech_time_swap/`             | the 3–5 s segment replaced by a vocoder |
+| `freq-swapped-single` | `LJSpeech_freq_swap/` (1–2 kHz only) | only the 1–2 kHz band replaced by a vocoder |
 
 ## Layout
 
@@ -30,8 +30,8 @@ The pipeline is studied under three **setups**:
 | `data.py`       | `AudioDataset`, metadata readers, collate fns, corpus finders       |
 | `explainers.py` | `build_explainer` — trained UNet + random + captum baselines        |
 | `metrics.py`    | fidelity, faithfulness, AD/AI/AG, localization (+ evaluators)       |
-| `viz.py`        | `plot_mask` / `plot_spectrogram` / `plot_features`, GT masks        |
-| `vocoder.py`    | HiFi-GAN vocoding + freq/time swap generators                       |
+| `viz.py`        | `plot_mask` / `plot_spectrogram` / `plot_features`, freq GT masks   |
+| `vocoder.py`    | HiFi-GAN vocoding + frequency-swap generator                        |
 
 **Command-line scripts** (`python <script>.py --help`):
 
@@ -39,8 +39,8 @@ The pipeline is studied under three **setups**:
 |----------------------|---------------------------------------------------------------|
 | `evaluate.py`        | evaluate an explainer on a setup (fidelity/faithfulness/…)    |
 | `train_mask.py`      | train the U-Net mask predictor                                |
-| `train_detector.py`  | train the detector: `logreg`, `timeswap` or `cnn`             |
-| `generate_data.py`   | regenerate frequency / time swap datasets                     |
+| `train_detector.py`  | train the detector: `logreg` or `cnn`                         |
+| `generate_data.py`   | regenerate the frequency-swap dataset                         |
 | `export_masks.py`    | dump masks/spectrograms (`npy`) or masked features + metrics  |
 | `tsne.py`            | t-SNE of real/fake/relevant/irrelevant features               |
 | `streamlit_app.py`   | interactive demo (`streamlit run streamlit_app.py`)           |
@@ -76,7 +76,7 @@ The truncated wav2vec2 backbone is expected at
 python evaluate.py --setup freq-swapped --explanation optimized
 
 # Compare against a gradient baseline
-python evaluate.py --setup time-swapped --explanation saliency
+python evaluate.py --setup freq-swapped --explanation saliency
 
 # Train a mask predictor from scratch
 python train_mask.py --setup freq-swapped --epochs 100 --batch-size 15

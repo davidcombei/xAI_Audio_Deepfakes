@@ -107,7 +107,7 @@ class MelLogRegDetector(nn.Module):
         clip differ only by rounding noise, which gives tiny contributions of
         either sign in about half of all bins. On 24 sample clips per setup,
         the bins above 0.1 % of the strongest one hold ~96 % of the positive
-        evidence (6 % of the bins for time swaps, 15 % for freq swaps).
+        evidence (15 % of the bins for freq swaps).
 
         The mel spectrogram uses the same hop as the pipeline's STFT, so frame t
         is the same 20 ms in both; the last frame is dropped like compute_stft does.

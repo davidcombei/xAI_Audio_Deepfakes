@@ -1,0 +1,10 @@
+mlaad_subset/northandsouth_28_f000115.wav
+mlaad_subset/wives_and_daughters_26_f000348.wav
+mlaad_subset/novelle02_02_pirandello_f000032.wav
+mlaad_subset/chorna_rada_s001593.wav
+mlaad_subset/lalka_3_18_f000072.wav
+mlaad_subset/piratesofersatz_02_leinster_64kb_f000160.wav
+mlaad_subset/pink_fairy_book_14_f000021.wav
+mlaad_subset/northandsouth_42_f000008.wav
+mlaad_subset/wives_and_daughters_43_f000077.wav
+mlaad_subset/midnight_passenger_02_f000133.wav

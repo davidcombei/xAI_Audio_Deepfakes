@@ -30,17 +30,14 @@ tar_and_upload () {  # <dir relative to ROOT> <path_in_repo without extension>
 echo "==================== CHECKPOINTS (config.py) ===================="
 upload_file ckpts/ckpts_realisticDeepfakes/UNet_MP_epoch_41_loss_0.3316.pth   ckpts/ckpts_realisticDeepfakes/UNet_MP_epoch_41_loss_0.3316.pth
 upload_file ckpts/ckpts_freqSwapDeepfakes/UNet_MP_epoch_74_loss_0.0182.pth    ckpts/ckpts_freqSwapDeepfakes/UNet_MP_epoch_74_loss_0.0182.pth
-upload_file ckpts/ckpts_timeSwapDeepfakes_CORRECTED/UNet_MP_epoch_173_loss_0.3314.pth ckpts/ckpts_timeSwapDeepfakes_CORRECTED/UNet_MP_epoch_173_loss_0.3314.pth
 upload_file ckpts/logReg_ckpts/logReg_MLAAD_M-AILabs.joblib            ckpts/logReg_ckpts/logReg_MLAAD_M-AILabs.joblib
 upload_file ckpts/logReg_ckpts/logReg_vocoded_anyband_controlled.joblib ckpts/logReg_ckpts/logReg_vocoded_anyband_controlled.joblib
-upload_file ckpts/logReg_ckpts/logReg_vocoded_TIMESWAP_CORRECTED.joblib ckpts/logReg_ckpts/logReg_vocoded_TIMESWAP_CORRECTED.joblib
 
 echo "==================== WAV2VEC2 MODEL ===================="
 tar_and_upload models/wav2vec2-xls-r-2b_truncated models/wav2vec2-xls-r-2b_truncated
 
 echo "==================== DATASETS (config.py setups) ===================="
 tar_and_upload LJSpeech_freq_swap data/LJSpeech_freq_swap
-tar_and_upload LJSpeech_time_swap data/LJSpeech_time_swap
 tar_and_upload mlaad_subset       data/mlaad_subset
 
 echo "==================== TRAINING DATA (controlled setup) ===================="

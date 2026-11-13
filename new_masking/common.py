@@ -33,11 +33,10 @@ EXPERIMENT_DIR = Path(__file__).resolve().parent
 RUNS_DIR = EXPERIMENT_DIR / "runs"
 RESULTS_DIR = EXPERIMENT_DIR / "results"
 
-# The bona fide LJSpeech clips both swap datasets were made from. Checked: outside
-# the swapped band / segment the fakes equal these clips (up to 16-bit rounding).
+# The bona fide LJSpeech clips the freq-swap dataset was made from.
 REAL_DIR = config.TRAIN_AUDIO_DIR
 
-SETUP_NAMES = ["freq-swapped", "time-swapped"]
+SETUP_NAMES = ["freq-swapped"]
 FILLS = ["zero", "real"]
 
 
@@ -138,7 +137,7 @@ def keep_only_needed_wav2vec2_layers(ap):
     The checkpoint only has trained weights for the first 9 layers but its
     config declares 48, so the extra layers are random and never used. The
     detector reads hidden_states[9] (the input of layer 9), so keeping layers
-    0..9 gives exactly the same features (checked in iSTFT_check/) and makes
+    0..9 gives exactly the same features (checked: bit-identical) and makes
     every forward and backward pass about 4x faster.
     """
     model = ap.wav2vec2

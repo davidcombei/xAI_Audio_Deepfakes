@@ -45,7 +45,6 @@ if isinstance(torch.classes, types.ModuleType):
 # Final zero-fill U-Nets (see README.md).
 UNET_CHECKPOINTS = {
     "freq-swapped": RUNS_DIR / "freq-swapped_zerofill" / "UNet_MP_epoch_60_loss_0.0066_bn_recalibrated.pth",
-    "time-swapped": RUNS_DIR / "time-swapped_zerofill" / "UNet_MP_epoch_300_loss_0.0322_bn_recalibrated.pth",
 }
 
 LAST_TIME_S = (config.N_TIME_FRAMES - 1) * config.HOP_LENGTH / config.SAMPLING_RATE
@@ -176,7 +175,7 @@ def real_page():
 
 
 st.set_page_config(layout="wide", page_title="Simple classifier")
-st.session_state["setup_name"] = st.sidebar.selectbox("Setup", ["freq-swapped", "time-swapped"])
+st.session_state["setup_name"] = st.sidebar.selectbox("Setup", ["freq-swapped"])
 page = st.navigation([st.Page(fake_page, title="Fake", url_path="fake"),
                       st.Page(real_page, title="Real", url_path="real")])
 page.run()

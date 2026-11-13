@@ -130,13 +130,4 @@ def generate_gt_masks(
             save_path=out_dir / f"gt_mask_{f_low}_{f_high}Hz.png",
         )
 
-    total_duration = (num_frames * hop_length) / sr
-    time_mask = np.zeros((num_bins, num_frames))
-    start_f = int((3 / total_duration) * num_frames)
-    end_f = min(int((5 / total_duration) * num_frames), num_frames)
-    time_mask[:, start_f:end_f] = 1.0
-    plot_mask(
-        time_mask, title="ground-truth mask time 3-5 s",
-        sr=sr, hop_length=hop_length, save_path=out_dir / "gt_mask_time_3-5s.png",
-    )
     print(f"Ground-truth masks written to {out_dir}")

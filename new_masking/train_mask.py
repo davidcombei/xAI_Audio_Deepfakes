@@ -85,7 +85,6 @@ def train(setup_name, fill="real", epochs=40, batch_size=15, lr=3e-5, w_lr=1e-4,
     opt_model = torch.optim.Adam(model.parameters(), lr=lr)
     opt_w = torch.optim.Adam([loss_fn.w_raw], lr=w_lr)
 
-    # Resume from the last finished epoch (also works with a different number of GPUs).
     state_path = out_dir / "last_state.pt"
     start_epoch = 0
     if resume and state_path.exists():

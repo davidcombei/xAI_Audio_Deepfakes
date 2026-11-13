@@ -16,24 +16,21 @@ fake inside the mask and the real clip outside it, and "remove" is the other way
 round. Outside the manipulated region `X_fake = X_real`, so the mask value there
 changes neither input.
 
-The U-Net was retrained with this loss on both swap setups and evaluated on
-**all** files (40 000 freq-swapped, 5 000 time-swapped clips) with fidelity,
-faithfulness and AUC, under both fills.
+The U-Net was retrained with this loss on the freq-swapped setup and evaluated on
+**all** 40 000 files with fidelity, faithfulness and AUC, under both fills.
 
 ## Why
 
-Zero masking is itself out of distribution for the detector. On 60 clips per
-setup (`sanity_check.py`, `results/logs/sanity_check.txt`), the detector calls
+Zero masking is itself out of distribution for the detector. On 60 clips
+(`sanity_check.py`, `results/logs/sanity_check.txt`), the detector calls
 these inputs fake:
 
-| input | freq detector | time detector |
-|---|---:|---:|
-| fake clip | 1.00 | 0.97 |
-| bona fide clip | 0.02 | 0.02 |
-| bona fide clip, one 1 kHz band set to zero | **0.98** | — |
-| bona fide clip, everything but one 1 kHz band set to zero | **0.62** | — |
-| bona fide clip, 3–5 s set to zero | — | 0.13 |
-| bona fide clip, 0–3 s set to zero | — | **0.87** |
+| input | freq detector |
+|---|---:|
+| fake clip | 1.00 |
+| bona fide clip | 0.02 |
+| bona fide clip, one 1 kHz band set to zero | **0.98** |
+| bona fide clip, everything but one 1 kHz band set to zero | **0.62** |
 
 Zeroing parts of a *real* clip makes it look fake, so under zero fill the
 fidelity/faithfulness scores mix "found the manipulation" with "made the input
@@ -41,34 +38,29 @@ look odd". With real fill the filled-in part is real speech.
 
 ## Setup
 
-* **Bona fide reference.** Both swap datasets were built from
-  `LJSpeech_vocoded22K/<id>.wav`. Checked: outside the swapped segment the
-  time swaps equal the original up to 16-bit rounding (max |Δ| = 1.5e-5), and
-  97–99 % of the fake−real difference energy lies inside the named band for the
-  freq swaps. Re-saving, STFT→ISTFT round trips and dither leave the detector's
-  verdict on bona fide clips unchanged (median logit −41 freq / −48 time detector), so the detector reacts to
-  the vocoder, not to the processing.
+* **Bona fide reference.** The freq-swap dataset was built from
+  `LJSpeech_vocoded22K/<id>.wav`. Checked: 97–99 % of the fake−real difference
+  energy lies inside the named band. Re-saving, STFT→ISTFT round trips and dither
+  leave the detector's verdict on bona fide clips unchanged (median logit −41), so
+  the detector reacts to the vocoder, not to the processing.
 * **Only the loss changes.** Same U-Net, same input (the fake's 512 × 248 STFT
   magnitude), same LMAC terms, learnable loss weights and initial values, Adam
   lr 3e-5 / 1e-4, batch 15 per GPU. The U-Net never sees the bona fide clip.
   With `fill="zero"` the new loss reproduces `losses.LMACLoss` (171.1176 vs
   171.1177 on a test batch).
-* **Runs.** freq-swapped: 5 GPUs × 15 (effective batch 75), 40 epochs.
-  time-swapped: 3 GPUs × 15 (45), 150 epochs (≈ the 173 × 5 000 clips behind the
-  original epoch-173 checkpoint). Run time ≈ 10 h on 8 V100s, both in parallel.
-* **All files.** The runs started with 500 utterance ids held out
-  (`runs/held_out_ids_early_epochs.txt`). From freq epoch 24 / time epoch 118 on,
-  they were resumed on all files, so every file was in training for the last
-  17 / 33 epochs. Evaluation uses all files.
+* **Run.** 5 GPUs × 15 (effective batch 75), 40 epochs.
+* **All files.** The run started with 500 utterance ids held out
+  (`runs/held_out_ids_early_epochs.txt`). From epoch 24 on it was resumed on all
+  files, so every file was in training for the last 17 epochs. Evaluation uses
+  all files.
 * **BatchNorm statistics.** The running BatchNorm averages saved with the freq
   epoch-40 checkpoint did not match the batch statistics used in training. On
   240 random clips, removing the mask flipped 52 % of decisions in eval mode,
   against 98 % with batch statistics (epoch 30's checkpoint: 99.6 %, fine).
   `recalibrate_bn.py` recomputes the averages over one pass of the data
-  without changing any weights. Both new checkpoints are evaluated in this
-  recalibrated form (`*_bn_recalibrated.pth`). The time checkpoint was already
-  fine (94.6 % before and after). Before recalibration, freq real-fill
-  faithfulness was 0.507 (`results/*/summary_before_bn_recalibration.txt`).
+  without changing any weights. The new checkpoint is evaluated in this
+  recalibrated form (`*_bn_recalibrated.pth`). Before recalibration, real-fill
+  faithfulness was 0.507 (`results/freq-swapped/summary_before_bn_recalibration.txt`).
   The original U-Net is evaluated exactly as shipped.
 
 ## Results (all files)
@@ -98,18 +90,6 @@ Per swapped band (`results/freq-swapped/summary_per_band.csv`):
 | 6–7 | 1.000 / 0.990 | 0.720 | 0.415 | 0.995 / 0.035 | 0.280 / 0.000 |
 | 7–8 | 1.000 / 0.992 | 0.765 | 0.460 | 0.973 / 0.481 | 0.276 / 0.010 |
 
-### time-swapped (5 000 clips, 97.4 % called fake)
-
-| mask | Fidelity, zero fill | Faithfulness, zero fill | Fidelity, real fill | Faithfulness, real fill | AUC |
-|---|---:|---:|---:|---:|---:|
-| U-Net, real fill (**new**) | 0.976 | 0.089 | **0.999** | **0.932** | **0.678** |
-| U-Net, zero fill (original) | 0.979 | **0.938** | 0.997 | 0.070 | 0.372 |
-| ground truth | 0.961 | 0.843 | 0.999 | 0.935 | 1.000 |
-
-Real-fill faithfulness tops out at ≈ 0.93 here. In 357 clips the original is
-shorter than 3 s, so 3–5 s is silence in both clips and nothing was swapped;
-no mask can flip those.
-
 ### Figures (`results/figures/`)
 
 * `mask_profiles_freq.png` — mask averaged over time, per swapped band. The
@@ -119,13 +99,6 @@ no mask can flip those.
 * `examples_freq.png` — one utterance, 4 bands. The |X_fake − X_real| column
   shows why: in this STFT (rectangular 644-sample window) the vocoded band
   leaks across all frequencies at onsets.
-* `mask_profiles_time.png` — mask averaged over frequency. For clips ≥ 5 s the
-  new mask is ≈ 0 before 3 s and rises at exactly 3 s. For clips < 3 s, where
-  nothing was swapped, it stays ≈ 0 everywhere. So it reacts to the vocoded
-  speech, not to the position. (The original U-Net is flat, slightly *lower*
-  in 3–5 s.)
-* `examples_time.png` — the new mask marks low-frequency harmonics inside
-  3–5 s, plus a few small patches earlier.
 * `training_curves.png` — loss terms per epoch.
 
 ## Take-aways
@@ -137,12 +110,8 @@ no mask can flip those.
    mask.
 2. **Real fill makes the masks localize the manipulation.** freq AUC 0.50 →
    0.74, between 0.70 and 0.78 in every band. The original is ≤ 0.55 except at
-   0–1 kHz, where its fixed low-frequency mask happens to sit. time AUC 0.37
-   (anti-localized) → 0.68.
-3. **Real fill makes the ground truth a sensible reference for time.** The
-   ground-truth time mask scores 0.999 / 0.935 with real fill, and the new
-   U-Net matches it.
-4. **For freq, the ground truth is still not an upper bound.** Refilling the
+   0–1 kHz, where its fixed low-frequency mask happens to sit.
+3. **The ground truth is not an upper bound.** Refilling the
    nominal 1 kHz band from the real clip flips only 14 % of decisions. The
    detector still sees vocoder traces that leak outside the band in this STFT.
    The new U-Net learns to cover those too (onset stripes, 6–8 kHz floor), so
@@ -156,12 +125,8 @@ no mask can flip those.
 * freq training had not converged at epoch 40 (`l_out` and L1 still falling;
   the original freq U-Net trained 74 epochs). It can be continued with
   `--resume --epochs N`.
-* AUC is a ranking score. For time clips < 3 s, the new U-Net's mask is ≈ 0
-  everywhere (mean 0.0119 inside 3–5 s, 0.0118 outside), yet its AUC against
-  the 3–5 s box is 0.68: tiny differences still rank. AUC for clips ≥ 5 s is
-  also 0.68.
-* The `compute_stft` crop (Nyquist bin and last frame re-padded with zeros,
-  see `iSTFT_check/`) is unchanged and applies to every input here, the bona
+* The `compute_stft` crop (Nyquist bin and last frame re-padded with zeros)
+  is unchanged and applies to every input here, the bona
   fide reference included.
 
 ## Files
@@ -183,6 +148,5 @@ Outputs: `runs/<setup>_realfill/` (checkpoints, `loss_terms.txt`, `train.log`),
 Final checkpoints:
 
 * `runs/freq-swapped_realfill/UNet_MP_epoch_40_loss_0.4558_bn_recalibrated.pth`
-* `runs/time-swapped_realfill/UNet_MP_epoch_150_loss_0.4779_bn_recalibrated.pth`
 
 Run everything from the repo root with system `python3` (see `run_all.sh`).

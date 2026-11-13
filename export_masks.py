@@ -15,7 +15,8 @@ import config
 from audio import AudioProcessor
 from data import AudioDataset, FakeAndRealDataset, collate_fake_and_real, collate_features, read_paths
 from explainers import build_mask_predictor
-from masking import FILLS, check_fill, keep_masked_part, remove_masked_part
+from masking import (FILLS, check_fill, fill_spectrogram, keep_masked_part, load_fill_reference,
+                     remove_masked_part)
 from metrics import average_drop, average_gain, average_increase, faithfulness, fidelity
 from models import TorchLogReg
 
@@ -58,6 +59,7 @@ def export_features(setup, batch_size=4, device=None, fill="real"):
     setup, ap, _, predict_mask, device = _build(setup, batch_size, device)
     check_fill(setup, fill)
     real_dir = setup.real_dir if fill == "real" else None
+    reference = load_fill_reference(setup, fill, device)
     loader = DataLoader(
         FakeAndRealDataset(read_paths(setup.filelist), ap, root=config.PROJECT_ROOT, real_dir=real_dir),
         batch_size=batch_size, shuffle=False, collate_fn=collate_fake_and_real,
@@ -74,6 +76,7 @@ def export_features(setup, batch_size=4, device=None, fill="real"):
         fakes = fakes.to(device)                       # (batch, 80000)
         x_fake, magnitude, _ = ap.compute_stft(fakes)  # (batch, 513, 313)
         x_real, _, _ = ap.compute_stft(reals.to(device))
+        x_real = fill_spectrogram(fill, reference, x_fake, x_real)
         mask = predict_mask(magnitude, paths)          # (batch, 513, 313)
 
         features = ap.extract_features(fakes)
@@ -114,7 +117,7 @@ def parse_args():
         s.add_argument("--device", default=None)
         if mode == "features":
             s.add_argument("--fill", choices=FILLS, default="real",
-                           help="real = masked-out bins filled from the bona fide clip; zero = original masking")
+                           help="real = masked-out bins filled from the bona fide clip; avg = from the setup's average spectrogram (compute_avg_spectrogram.py); avgreal = from the average bona fide spectrogram (compute_avg_spectrogram.py --source real); optimized = from the fill optimised to be neutral for the setup's detector (learn_neutral_fill.py); zero = original masking")
     return p.parse_args()
 
 

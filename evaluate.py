@@ -17,7 +17,7 @@ from audio import AudioProcessor
 from data import FakeAndRealDataset, collate_fake_and_real, read_paths
 from detector import build_detector
 from explainers import METHODS, build_explainer
-from masking import FILLS, check_fill
+from masking import FILLS, check_fill, fill_spectrogram, load_fill_reference
 from metrics import (
     GROUND_TRUTH,
     AverageDropIncreaseGain,
@@ -83,6 +83,21 @@ def _cache(explainer, cache_dir):
     return cached
 
 
+def explanation_cache_dir(setup, method):
+    """output/explanations/<setup>/<method>/, where cached masks are kept.
+
+    The U-Net's masks depend on its checkpoint, so they are kept per checkpoint
+    (optimized__<run dir>__<ckpt name>); otherwise a new mask_ckpt in config.py would
+    silently reuse the masks of the previous U-Net. The other methods do not depend on
+    the U-Net or on the fill, so their caches are shared.
+    """
+    name = method
+    if method == "optimized" and setup.mask_ckpt is not None:
+        ckpt = Path(setup.mask_ckpt)
+        name = f"optimized__{ckpt.parent.name}__{ckpt.stem}"
+    return config.PROJECT_ROOT / "output" / "explanations" / setup.name / name
+
+
 def method_label(method):
     """Name used in the printed results: the trained U-Net is the learned mask."""
     return "learned_mask" if method == "optimized" else method
@@ -107,6 +122,7 @@ def evaluate(setup, explanation_method, batch_size=4, device=None, cache=True, f
     example_set = set(examples)
     examples_dir = EXAMPLES_DIR / setup.name
     real_dir = setup.real_dir if fill == "real" else None
+    reference = load_fill_reference(setup, fill, device)
     loader = DataLoader(
         FakeAndRealDataset(paths, ap, root=config.PROJECT_ROOT, real_dir=real_dir),
         batch_size=batch_size,
@@ -124,7 +140,7 @@ def evaluate(setup, explanation_method, batch_size=4, device=None, cache=True, f
     for method in methods:
         explainer = build_explainer(setup, method, detector, device=device)
         if cache:
-            explainer = _cache(explainer, config.PROJECT_ROOT / "output" / "explanations" / setup.name / method)
+            explainer = _cache(explainer, explanation_cache_dir(setup, method))
         explainers[method] = explainer
         evaluators[method] = [
             FidelityEvaluator(detector, fill),
@@ -138,6 +154,7 @@ def evaluate(setup, explanation_method, batch_size=4, device=None, cache=True, f
     for fakes, reals, audio_paths in tqdm(loader, desc=desc, ascii=True):
         x_fake, magnitude, phase = ap.compute_stft(fakes.to(device))   # (batch, 513, 313)
         x_real, _, _ = ap.compute_stft(reals.to(device))               # (batch, 513, 313)
+        x_real = fill_spectrogram(fill, reference, x_fake, x_real)
         for method in methods:
             pred = explainers[method](magnitude, phase, audio_paths)   # (batch, 513, 313)
             with torch.no_grad():
@@ -169,7 +186,7 @@ def evaluate(setup, explanation_method, batch_size=4, device=None, cache=True, f
 @click.option("--device", default=None, help="e.g. cuda, cuda:1, cpu")
 @click.option("--cache/--no-cache", default=True, show_default=True)
 @click.option("--fill", type=click.Choice(FILLS), default="real", show_default=True,
-              help="real = masked-out bins filled from the bona fide clip; zero = original masking")
+              help="real = masked-out bins filled from the bona fide clip; avg = from the setup's average spectrogram (compute_avg_spectrogram.py); avgreal = from the average bona fide spectrogram (compute_avg_spectrogram.py --source real); optimized = from the fill optimised to be neutral for the setup's detector (learn_neutral_fill.py); zero = original masking")
 @click.option("-n", "--n-examples", default=10, show_default=True,
               help="random clips whose audio and masks are saved to images_npy/<setup>/ (0 = none)")
 @click.option("--examples-seed", default=0, show_default=True,

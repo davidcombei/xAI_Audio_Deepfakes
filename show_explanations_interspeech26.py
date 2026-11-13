@@ -87,5 +87,3 @@ figure("realistic", ["input", "saliency", "input-x-gradient", "gradient-shap", "
        "realistic-subset.txt", k=2)
 figure("freq-swapped", ["input", "groundtruth", "optimized"],
        "freq-swap-subset.txt", k=1, contains="2000-3000")
-figure("time-swapped", ["input", "groundtruth", "optimized"],
-       "time-swap-subset.txt", k=1)

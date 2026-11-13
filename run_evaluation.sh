@@ -7,7 +7,16 @@
 #
 #   GPUS="2 3 4 5" ./run_evaluation.sh     choose GPUs
 #
-# All runs use real fill: masked-out bins are filled from the bona fide clip. Nothing uses zero fill.
+# Default: avg fill, masked-out bins are filled with each setup's own average spectrogram
+# (make it first: python compute_avg_spectrogram.py -s <setup>).
+#   FILL=real ./run_evaluation.sh       fill them from the bona fide clip instead
+#   FILL=avgreal ./run_evaluation.sh    fill them with the average bona fide spectrogram
+#                                       (compute_avg_spectrogram.py -s <setup> --source real)
+#   FILL=optimized ./run_evaluation.sh  fill them with the fill optimised to be neutral for each
+#                                       setup's detector (learn_neutral_fill.py)
+# Logs: logs/evaluation/ for real fill, logs/evaluation_<fill>fill/ for any other fill.
+# The U-Net evaluated per setup is mask_ckpt in config.py; its masks are cached per checkpoint
+# (output/explanations/<setup>/optimized__<run>__<ckpt>/), so changing mask_ckpt recomputes them.
 #
 # Jobs per setup:
 #   optimized          the trained U-Net (printed as "learned_mask")
@@ -20,7 +29,7 @@
 # Each GPU takes the next job from a shared queue until the queue is empty.
 # Random masks are evaluated once per setup as their own job ("-e random"), so the other jobs
 # run with --no-random-baseline instead of repeating the same random baseline four times.
-# Logs: logs/evaluation/<setup>__<job>.out (results) and .err (progress bars, warnings).
+# Logs: $LOG_DIR/<setup>__<job>.out (results) and .err (progress bars, warnings).
 # Example clips (wav + audio .npy + every method's mask .npy): images_npy/<setup>/, listed in files.txt.
 
 set -u
@@ -31,12 +40,13 @@ cd "$(dirname "$0")"
 SETUPS=${SETUPS:-"freq-swapped realistic freq-swapped-single"}
 METHODS=${METHODS:-"gradient-shap saliency input-x-gradient optimized random"}
 GPUS=${GPUS:-"2 3 4 5 6 7"}
-FILL=real
+FILL=${FILL:-avg}
 BATCH_SIZE=${BATCH_SIZE:-4}
 # Gradient-SHAP peaks at 29.4 GiB on a 32 GiB GPU with batch 4.
 BATCH_SIZE_GRADIENT_SHAP=${BATCH_SIZE_GRADIENT_SHAP:-2}
 PYTHON=${PYTHON:-.venv/bin/python}
 LOG_DIR=logs/evaluation
+[[ "$FILL" != "real" ]] && LOG_DIR="logs/evaluation_${FILL}fill"
 # Jobs that need extra flags, as "<setup>/<method>=<flags>".
 EXTRA_FLAGS=${EXTRA_FLAGS:-""}
 # If another evaluate.py run of the same setup/method is already filling its cache, use --no-cache
@@ -95,10 +105,11 @@ def print_table(rows, first_cols, short={}):
 
 
 if rows:
-    print("EXPLANATIONS (real fill)\n")
+    print(f"EXPLANATIONS ({log_dir})\n")
     print_table(rows, ["setup", "method"], {
         "Average Drop": "AvgDrop", "Average Increase": "AvgInc", "Average Gain": "AvgGain",
-        "Localization": "AUC", "Localization RMA": "RMA", "Localization RMA (chance)": "RMA chance"})
+        "Localization": "AUC", "Localization RMA": "RMA", "Localization RMA (chance)": "RMA chance",
+        "Localization RMA +50Hz": "RMA+50Hz", "Localization RMA +50Hz (chance)": "RMA+50Hz chance"})
 if eer_rows:
     print("\nDETECTOR EER (setup's fakes + their bona fide clips)\n")
     print_table(eer_rows, ["setup"])

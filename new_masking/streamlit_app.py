@@ -49,7 +49,7 @@ if isinstance(torch.classes, types.ModuleType):
     torch.classes.__path__ = []
 
 # Real-fill U-Net, epoch 11. Removing its mask flips the freq-swapped detector
-# (p_fake 1.00 -> 0.00 on 12 clips) but only partly the time-swapped one (0.98 -> 0.15).
+# (p_fake 1.00 -> 0.00 on 12 clips).
 UNET_CHECKPOINT = EXPERIMENT_DIR / "ckpts" / "UNet_MP_epoch_11_loss_0.1363.pth"
 
 LAST_TIME_S = (config.N_TIME_FRAMES - 1) * config.HOP_LENGTH / config.SAMPLING_RATE
@@ -218,11 +218,8 @@ def real_page():
 
 
 st.set_page_config(layout="wide", page_title="Real-fill masking")
-st.session_state["setup_name"] = st.sidebar.selectbox("Setup", ["freq-swapped", "time-swapped"])
+st.session_state["setup_name"] = st.sidebar.selectbox("Setup", ["freq-swapped"])
 st.sidebar.markdown(f"**U-Net (real fill)**  \n`{UNET_CHECKPOINT.relative_to(config.PROJECT_ROOT)}`")
-if st.session_state["setup_name"] == "time-swapped":
-    st.sidebar.warning("This U-Net looks trained on freq-swapped: on time-swapped clips "
-                       "removing its mask only partly flips the detector.")
 page = st.navigation([st.Page(fake_page, title="Fake", url_path="fake"),
                       st.Page(real_page, title="Real", url_path="real")])
 page.run()

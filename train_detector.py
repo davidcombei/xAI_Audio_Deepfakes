@@ -62,38 +62,6 @@ def train_logreg(fake_meta, real_meta, out_path, C=1.0, device=None):
     fit_and_save_logreg(X, y, out_path, C)
 
 
-def timeswap_features(ap, names, clean_dir=None, vocoded_dir=None, start_sec=3.0, end_sec=5.0):
-
-    clean_dir = Path(clean_dir or config.TRAIN_AUDIO_DIR)
-    vocoded_dir = Path(vocoded_dir or config.VOCODED_DIR)
-    sr = config.SAMPLING_RATE
-    start, end = int(start_sec * sr), int(end_sec * sr)
-
-    feats, labels = [], []
-    for name in tqdm(names, desc="clean", ascii=True):
-        wave, _ = ap.load_audio(clean_dir / name)
-        feats.append(ap.extract_features(wave).mean(0).cpu().numpy())
-        labels.append(0)
-    for name in tqdm(names, desc="time-swapped", ascii=True):
-        clean, _ = ap.load_audio(clean_dir / name)
-        voc, _ = ap.load_audio(vocoded_dir / f"{name}_vocoded.wav")
-        mixed = clean.clone()
-        hi = min(end, mixed.shape[-1])
-        mixed[start:hi] = voc[start:hi]
-        feats.append(ap.extract_features(mixed).mean(0).cpu().numpy())
-        labels.append(1)
-    return np.array(feats), np.array(labels)
-
-
-def train_logreg_timeswap(out_path, filelist=None, n=5000, C=1e6, device=None):
-    ap = AudioProcessor(device=device)
-    filelist = filelist or (config.METADATA_DIR / "ljspeech_manipulated_metadata.txt")
-    names = read_paths(filelist)[:n]
-    X, y = timeswap_features(ap, names)
-    fit_and_save_logreg(X, y, out_path, C)
-
-
-
 class _SpecDataset(Dataset):
     def __init__(self, metadata, ap, root):
         self.paths, self.labels = read_labeled(metadata)
@@ -169,12 +137,6 @@ def parse_args():
     lr.add_argument("--out", required=True, help="output .joblib path")
     lr.add_argument("--C", type=float, default=1.0)
 
-    ts = sub.add_parser("timeswap", help="logistic regression: clean vs. on-the-fly time swaps")
-    ts.add_argument("--out", required=True, help="output .joblib path")
-    ts.add_argument("--filelist", default=None, help="clean clip names (default: ljspeech_manipulated_metadata.txt)")
-    ts.add_argument("--n", type=int, default=5000)
-    ts.add_argument("--C", type=float, default=1e6)
-
     cnn = sub.add_parser("cnn", help="CNN over log-magnitude spectrograms")
     cnn.add_argument("--metadata", required=True, help="path,label metadata")
     cnn.add_argument("--root", default=None, help="root dir for the wav paths")
@@ -189,8 +151,6 @@ def main():
     args = parse_args()
     if args.kind == "logreg":
         train_logreg(args.fake, args.real, args.out, C=args.C)
-    elif args.kind == "timeswap":
-        train_logreg_timeswap(args.out, filelist=args.filelist, n=args.n, C=args.C)
     else:
         train_cnn(args.metadata, root=args.root, out_path=args.out,
                   epochs=args.epochs, batch_size=args.batch_size, lr=args.lr)

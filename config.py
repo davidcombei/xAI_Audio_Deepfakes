@@ -27,7 +27,6 @@ W2V2_HIDDEN_LAYER = 9
 FEATURE_DIM = 1920      
 
 
-DEFAULT_DETECTOR_CKPT = CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_TIMESWAP_CORRECTED.joblib"
 
 
 SAMPLING_RATE = 16_000
@@ -82,7 +81,7 @@ SETUPS: dict[str, Setup] = {
         # The 27171 files the U-Net in runs/realistic_realfill was trained on
         # (every wav in mlaad_subset/, each one has an M-AILABS clip in mailabs_real/).
         filelist=METADATA_DIR / "realistic-all.txt",
-        mask_ckpt=CKPTS_DIR_RUNS / "realistic_realfill" / "UNet_MP_epoch_380_loss_0.2463.pth",
+        mask_ckpt=CKPTS_DIR_RUNS / "realistic_avgfill" / "UNet_MP_epoch_100_loss_0.1180.pth",
         detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_MLAAD_M-AILabs.joblib",
         localization=None,
         # Links to the M-AILABS clips, made by link_mailabs_reals.py. These clips are
@@ -94,7 +93,7 @@ SETUPS: dict[str, Setup] = {
         data_dir=PROJECT_ROOT / "LJSpeech_freq_swap",
         filelist=METADATA_DIR / "freq-swap-all.txt",  # all 40000 swaps (8 bands x 5000 clips)
        # mask_ckpt=CKPTS_DIR / "ckpts_freqSwapDeepfakes" / "UNet_MP_epoch_74_loss_0.0182.pth",
-        mask_ckpt = CKPTS_DIR / "ckpts_freqSwapFull_real-fill" / "UNet_MP_epoch_100_loss_0.2609.pth",
+        mask_ckpt = CKPTS_DIR_RUNS / "freq-swapped_avgfill" / "UNet_MP_epoch_100_loss_0.0508.pth",
         detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_anyband_controlled.joblib",
         localization="freq",
         real_dir=TRAIN_AUDIO_DIR,
@@ -105,20 +104,11 @@ SETUPS: dict[str, Setup] = {
         name="freq-swapped-single",
         data_dir=PROJECT_ROOT / "LJSpeech_freq_swap",
         filelist=METADATA_DIR / "freq-swap-single-all.txt",  # all 5000 1-2 kHz swaps
-        mask_ckpt=CKPTS_DIR/ "ckpts_singleFreqSwap_real-fill" / "UNet_MP_epoch_99_loss_0.2838.pth",  
+        mask_ckpt=CKPTS_DIR_RUNS / "freq-swapped-single_avgfill" / "UNet_MP_epoch_100_loss_0.1480.pth",  
         detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_1-2kHz_controlled.joblib",
         localization="freq",
         real_dir=TRAIN_AUDIO_DIR,
         file_pattern="*_vocoded_1000-2000.wav",
-    ),
-    "time-swapped": Setup(
-        name="time-swapped",
-        data_dir=PROJECT_ROOT / "LJSpeech_time_swap",
-        filelist=METADATA_DIR / "time-swap-subset.txt",
-        mask_ckpt=CKPTS_DIR / "ckpts_timeSwapDeepfakes_CORRECTED" / "UNet_MP_epoch_173_loss_0.3314.pth",
-        detector_ckpt=CKPTS_DIR / "logReg_ckpts" / "logReg_vocoded_TIMESWAP_CORRECTED.joblib",
-        localization="time",
-        real_dir=TRAIN_AUDIO_DIR,
     ),
 }
 
@@ -126,9 +116,6 @@ SETUPS: dict[str, Setup] = {
 # manipulated region, i.e. what a perfect mask predictor would score.
 SETUPS["ground_truth_frequency"] = replace(
     SETUPS["freq-swapped"], name="ground_truth_frequency", mask_ckpt=None, ground_truth_masks=True
-)
-SETUPS["ground_truth_time"] = replace(
-    SETUPS["time-swapped"], name="ground_truth_time", mask_ckpt=None, ground_truth_masks=True
 )
 
 SETUP_NAMES = tuple(SETUPS)
@@ -144,7 +131,7 @@ def get_setup(name: str) -> Setup:
 
 
 def setup_key(setup) -> str:
-    """Short key used in output filenames: 'realistic' / 'freq' / 'freq-single' / 'time'."""
+    """Short key used in output filenames: 'realistic' / 'freq' / 'freq-single'."""
     name = setup.name if isinstance(setup, Setup) else setup
     key = name.split("-")[0]
     if name.endswith("-single"):

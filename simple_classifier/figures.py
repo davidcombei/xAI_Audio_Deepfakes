@@ -1,16 +1,14 @@
 """Figures for the simple-classifier experiment, written to simple_classifier/results/figures/.
 
-  detector_weights.png    how much each mel band moves the logit, for both detectors
+  detector_weights.png    how much each mel band moves the logit
   mask_profiles_freq.png  masks averaged over time, per swapped band
-  mask_profiles_time.png  masks averaged over frequency (clips whose original is >= 5 s)
-  examples.png            |X_fake - X_real| and the three masks, for 3 clips
-  training_curves.png     loss terms per epoch of the 4 U-Net runs
+  examples.png            |X_fake - X_real| and the three masks, for 2 clips
+  training_curves.png     loss terms per epoch of the 2 U-Net runs
 
 Run from the repo root:
 
     CUDA_VISIBLE_DEVICES=0 python3 simple_classifier/figures.py \\
-        --freq-zerofill-ckpt <.pth> --freq-realfill-ckpt <.pth> \\
-        --time-zerofill-ckpt <.pth> --time-realfill-ckpt <.pth>
+        --freq-zerofill-ckpt <.pth> --freq-realfill-ckpt <.pth>
 """
 
 from __future__ import annotations
@@ -27,7 +25,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import soundfile as sf
 import torch
 from matplotlib.colors import LinearSegmentedColormap
 from torch.utils.data import DataLoader
@@ -36,7 +33,7 @@ import config
 from audio import AudioProcessor
 from common import (
     RESULTS_DIR, RUNS_DIR, FakeAndRealDataset, collate_fake_and_real, complex_stft, detector_path,
-    list_files, real_path,
+    list_files,
 )
 from mel_detector import MelLogRegDetector
 from models import load_mask_predictor
@@ -96,20 +93,16 @@ def load_models(setup_name, zerofill_ckpt, realfill_ckpt, device):
 
 
 def detector_weights(device):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3), constrained_layout=True, sharey=True)
-    setups = ["freq-swapped", "time-swapped"]
-    for col in range(2):
-        detector = MelLogRegDetector(detector_path(setups[col])).to(device)
-        filters = detector.mel.mel_scale.fb.cpu().numpy()                     # (513, 80)
-        centres_khz = filters.argmax(axis=0) * (config.SAMPLING_RATE / 2) / config.N_FREQ_BINS / 1000
-        weights = detector.band_weights().cpu().numpy()                      # (80,)
-        ax = axes[col]
-        ax.axhline(0, color=INK_2, linewidth=1)
-        ax.plot(centres_khz, weights, color=BLUE, marker="o", markersize=3)
-        ax.set_title(f"{setups[col]} detector", loc="left")
-        ax.set_xlabel("mel band centre (kHz)")
-        if col == 0:
-            ax.set_ylabel("logit change per unit\nof mean log-mel (> 0: fake)")
+    fig, ax = plt.subplots(figsize=(5, 3), constrained_layout=True)
+    detector = MelLogRegDetector(detector_path("freq-swapped")).to(device)
+    filters = detector.mel.mel_scale.fb.cpu().numpy()                     # (513, 80)
+    centres_khz = filters.argmax(axis=0) * (config.SAMPLING_RATE / 2) / config.N_FREQ_BINS / 1000
+    weights = detector.band_weights().cpu().numpy()                      # (80,)
+    ax.axhline(0, color=INK_2, linewidth=1)
+    ax.plot(centres_khz, weights, color=BLUE, marker="o", markersize=3)
+    ax.set_title("freq-swapped detector", loc="left")
+    ax.set_xlabel("mel band centre (kHz)")
+    ax.set_ylabel("logit change per unit\nof mean log-mel (> 0: fake)")
     fig.savefig(FIGURE_DIR / "detector_weights.png")
     plt.close(fig)
 
@@ -159,50 +152,14 @@ def mask_profiles_freq(ap, detector, unets, device, clips_per_band):
     plt.close(fig)
 
 
-def mask_profiles_time(ap, detector, unets, device, n_clips):
-    setup = config.get_setup("time-swapped")
-    long_paths = []
-    for path in list_files(setup):
-        if sf.info(str(real_path(path))).duration >= 5.0:  # 3-5 s holds vocoded speech
-            long_paths.append(path)
-        if len(long_paths) == n_clips:
-            break
-
-    sums = {}
-    for method in METHODS:
-        sums[method] = np.zeros(config.N_TIME_FRAMES)
-    loader = DataLoader(FakeAndRealDataset(long_paths, ap), batch_size=16,
-                        collate_fn=collate_fake_and_real, num_workers=4)
-    for fakes, reals, _ in loader:
-        with torch.no_grad():
-            x_fake = complex_stft(ap, fakes.to(device))
-            x_real = complex_stft(ap, reals.to(device))
-        masks = all_masks(ap, detector, unets, x_fake, x_real)
-        for method in METHODS:
-            sums[method] += masks[method].mean(axis=1).sum(axis=0)  # sum over clips of the frequency-averaged mask
-
-    fig, ax = plt.subplots(figsize=(6, 3), constrained_layout=True)
-    ax.axvspan(3, 5, color=GT_SHADE, linewidth=0)
-    for method in METHODS:
-        ax.plot(TIMES_S, sums[method] / len(long_paths), color=COLORS[method], label=LABELS[method])
-    ax.set_xlabel("time (s)")
-    ax.set_ylabel("mask, mean over frequency")
-    ax.legend(loc="upper left")
-    ax.set_title(f"time-swapped: {len(long_paths)} clips whose original is >= 5 s (grey: swapped 3-5 s)", loc="left")
-    fig.savefig(FIGURE_DIR / "mask_profiles_time.png")
-    plt.close(fig)
-
-
 def examples(ap, models, device):
     """One row per clip: |X_fake - X_real| and the three masks."""
     freq_paths = list_files(config.get_setup("freq-swapped"))
-    time_paths = list_files(config.get_setup("time-swapped"))
-    utterance = Path(time_paths[0]).name[:10]
+    utterance = Path(freq_paths[0]).name[:10]
     rows = []
     for path in freq_paths:
         if Path(path).name.startswith(utterance) and (path.endswith("_1000-2000.wav") or path.endswith("_6000-7000.wav")):
             rows.append(("freq-swapped", path))
-    rows.append(("time-swapped", time_paths[0]))
 
     fig, axes = plt.subplots(len(rows), 4, figsize=(13, 2.6 * len(rows)), constrained_layout=True)
     extent = [0, TIMES_S[-1], 0, FREQUENCIES_KHZ[-1]]
@@ -227,11 +184,8 @@ def examples(ap, models, device):
             ax.grid(False)
             ax.set_title(title if r == 0 else "", loc="left")
             if c == 0:
-                if setup_name == "freq-swapped":
-                    low, high = Path(path).stem.split("_")[-1].split("-")
-                    swap = f"{int(low) // 1000}-{int(high) // 1000} kHz swapped"
-                else:
-                    swap = "3-5 s swapped"
+                low, high = Path(path).stem.split("_")[-1].split("-")
+                swap = f"{int(low) // 1000}-{int(high) // 1000} kHz swapped"
                 ax.set_ylabel(f"{Path(path).name[:10]}, {swap}\nfrequency (kHz)")
             if r == len(rows) - 1:
                 ax.set_xlabel("time (s)")
@@ -259,23 +213,21 @@ def read_loss_log(path):
 
 
 def training_curves():
-    fig, axes = plt.subplots(2, 3, figsize=(10, 5), constrained_layout=True)
-    setups = ["freq-swapped", "time-swapped"]
+    fig, axes = plt.subplots(1, 3, figsize=(10, 2.5), constrained_layout=True)
     fills = [("zero", BLUE), ("real", ORANGE)]
-    for row in range(2):
-        for fill, color in fills:
-            epochs, l_in, l_out, l1 = read_loss_log(RUNS_DIR / f"{setups[row]}_{fill}fill" / "loss_terms.txt")
-            curves = [(l_in, "l_in: keep mask -> same decision"), (l_out, "l_out: remove mask -> flips"),
-                      (l1, "L1: mask mean")]
-            for col in range(3):
-                values, title = curves[col]
-                ax = axes[row, col]
-                ax.plot(epochs, values, color=color, label=f"U-Net, {fill} fill")
-                ax.set_title(f"{setups[row]}: {title}", loc="left")
-                ax.set_xlabel("epoch")
-                if col == 1:
-                    ax.set_yscale("log")
-    axes[0, 0].legend()
+    for fill, color in fills:
+        epochs, l_in, l_out, l1 = read_loss_log(RUNS_DIR / f"freq-swapped_{fill}fill" / "loss_terms.txt")
+        curves = [(l_in, "l_in: keep mask -> same decision"), (l_out, "l_out: remove mask -> flips"),
+                  (l1, "L1: mask mean")]
+        for col in range(3):
+            values, title = curves[col]
+            ax = axes[col]
+            ax.plot(epochs, values, color=color, label=f"U-Net, {fill} fill")
+            ax.set_title(f"freq-swapped: {title}", loc="left")
+            ax.set_xlabel("epoch")
+            if col == 1:
+                ax.set_yscale("log")
+    axes[0].legend()
     fig.savefig(FIGURE_DIR / "training_curves.png")
     plt.close(fig)
 
@@ -284,9 +236,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--freq-zerofill-ckpt", required=True)
     p.add_argument("--freq-realfill-ckpt", required=True)
-    p.add_argument("--time-zerofill-ckpt", required=True)
-    p.add_argument("--time-realfill-ckpt", required=True)
-    p.add_argument("--clips", type=int, default=200, help="clips per band (freq) / in total (time) for the profiles")
+    p.add_argument("--clips", type=int, default=200, help="clips per band for the profiles")
     args = p.parse_args()
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
     device = config.get_device()
@@ -294,14 +244,11 @@ def main():
 
     models = {
         "freq-swapped": load_models("freq-swapped", args.freq_zerofill_ckpt, args.freq_realfill_ckpt, device),
-        "time-swapped": load_models("time-swapped", args.time_zerofill_ckpt, args.time_realfill_ckpt, device),
     }
     training_curves()
     detector_weights(device)
     detector, unets = models["freq-swapped"]
     mask_profiles_freq(ap, detector, unets, device, args.clips)
-    detector, unets = models["time-swapped"]
-    mask_profiles_time(ap, detector, unets, device, args.clips)
     examples(ap, models, device)
     print(f"figures -> {FIGURE_DIR}")
 

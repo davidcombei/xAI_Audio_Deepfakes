@@ -1,15 +1,12 @@
 """Figures for the real-fill experiment, written to new_masking/results/figures/.
 
-  training_curves.png     loss terms per epoch of both real-fill runs
+  training_curves.png     loss terms per epoch of the real-fill run
   examples_freq.png       |X_fake - X_real|, ground truth and both U-Net masks (one utterance, 4 bands)
-  examples_time.png       the same for 3 time-swapped clips
   mask_profiles_freq.png  mask averaged over time, per swapped band
-  mask_profiles_time.png  mask averaged over frequency, for clips whose original is >= 5 s
-                          (3-5 s is vocoded speech) and < 3 s (3-5 s is silence: nothing was swapped)
 
 Run from the repo root:
 
-    CUDA_VISIBLE_DEVICES=0 python3 new_masking/figures.py --freq-ckpt <.pth> --time-ckpt <.pth>
+    CUDA_VISIBLE_DEVICES=0 python3 new_masking/figures.py --freq-ckpt <.pth>
 """
 
 from __future__ import annotations
@@ -26,7 +23,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import soundfile as sf
 import torch
 from matplotlib.colors import LinearSegmentedColormap
 from torch.utils.data import DataLoader
@@ -35,7 +31,7 @@ import config
 from audio import AudioProcessor
 from common import (
     RESULTS_DIR, RUNS_DIR, FakeAndRealDataset, collate_fake_and_real, complex_stft, list_files,
-    real_path, utterance_id,
+    utterance_id,
 )
 from metrics import GROUND_TRUTH
 from models import load_mask_predictor
@@ -88,26 +84,24 @@ def read_loss_log(path):
 
 
 def training_curves(all_files_from_epoch):
-    fig, axes = plt.subplots(2, 3, figsize=(10, 5), constrained_layout=True)
-    setups = ["freq-swapped", "time-swapped"]
-    for row in range(2):
-        setup_name = setups[row]
-        epochs, l_in, l_out, l1 = read_loss_log(RUNS_DIR / f"{setup_name}_realfill" / "loss_terms.txt")
-        curves = [
-            (l_in, "l_in", "keep mask -> same decision", False),
-            (l_out, "l_out", "remove mask -> decision flips", True),
-            (l1, "L1", "mask mean", False),
-        ]
-        for col in range(3):
-            values, term, meaning, log_scale = curves[col]
-            ax = axes[row, col]
-            ax.plot(epochs, values, color=BLUE)
-            ax.axvline(all_files_from_epoch[setup_name], color=INK_2, linewidth=1)
-            ax.set_title(f"{setup_name}: {term}", loc="left")
-            ax.set_ylabel(meaning)
-            ax.set_xlabel("epoch")
-            if log_scale:
-                ax.set_yscale("log")
+    fig, axes = plt.subplots(1, 3, figsize=(10, 2.5), constrained_layout=True)
+    setup_name = "freq-swapped"
+    epochs, l_in, l_out, l1 = read_loss_log(RUNS_DIR / f"{setup_name}_realfill" / "loss_terms.txt")
+    curves = [
+        (l_in, "l_in", "keep mask -> same decision", False),
+        (l_out, "l_out", "remove mask -> decision flips", True),
+        (l1, "L1", "mask mean", False),
+    ]
+    for col in range(3):
+        values, term, meaning, log_scale = curves[col]
+        ax = axes[col]
+        ax.plot(epochs, values, color=BLUE)
+        ax.axvline(all_files_from_epoch, color=INK_2, linewidth=1)
+        ax.set_title(f"{setup_name}: {term}", loc="left")
+        ax.set_ylabel(meaning)
+        ax.set_xlabel("epoch")
+        if log_scale:
+            ax.set_yscale("log")
     fig.suptitle("Real-fill training (grey line: from here on, all files are used)",
                  x=0.01, ha="left", color=INK)
     fig.savefig(FIGURE_DIR / "training_curves.png")
@@ -227,61 +221,15 @@ def mask_profiles_freq(realfill_ckpt, device, n_utterances=100):
     plt.close(fig)
 
 
-def mask_profiles_time(realfill_ckpt, device):
-    """Mean mask value per frame, averaged over frequency and clips, for two groups of clips."""
-    setup = config.get_setup("time-swapped")
-    ap = AudioProcessor(device=device)
-    unet_new = load_mask_predictor(realfill_ckpt, device)
-    unet_old = load_mask_predictor(setup.mask_ckpt, device)
-
-    long_clips = []    # original >= 5 s: 3-5 s holds vocoded speech
-    short_clips = []   # original < 3 s: 3-5 s is padding, so nothing was swapped
-    for path in list_files(setup):
-        duration = sf.info(str(real_path(path))).duration
-        if duration >= 5:
-            long_clips.append(path)
-        elif duration < 3:
-            short_clips.append(path)
-
-    groups = [
-        (long_clips, f"original >= 5 s ({len(long_clips)} clips): 3-5 s is vocoded speech"),
-        (short_clips, f"original < 3 s ({len(short_clips)} clips): 3-5 s is silence, nothing swapped"),
-    ]
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.4), sharey=True, constrained_layout=True)
-    for col in range(2):
-        paths, title = groups[col]
-        new_sum = np.zeros(config.N_TIME_FRAMES)
-        old_sum = np.zeros(config.N_TIME_FRAMES)
-        loader = DataLoader(FakeAndRealDataset(paths, ap), batch_size=16,
-                            collate_fn=collate_fake_and_real, num_workers=4)
-        for fakes, _, _ in loader:
-            x_fake = complex_stft(ap, fakes.to(device))
-            new_sum += predict_masks(unet_new, x_fake).mean(axis=1).sum(axis=0)  # sum over clips of (248,)
-            old_sum += predict_masks(unet_old, x_fake).mean(axis=1).sum(axis=0)
-        ax = axes[col]
-        ax.axvspan(3, 5, color=AQUA, alpha=0.15, linewidth=0)
-        ax.plot(TIMES_S, new_sum / len(paths), color=BLUE, label=NEW_LABEL)
-        ax.plot(TIMES_S, old_sum / len(paths), color=ORANGE, label=OLD_LABEL)
-        ax.set_title(title, loc="left")
-        ax.set_xlabel("time (s)")
-        ax.set_ylim(0, 1)
-    axes[0].set_ylabel("mean mask value")
-    add_legend(fig, axes[0], "3-5 s (ground truth)")
-    fig.suptitle("Mask averaged over frequency and clips", x=0.01, ha="left", color=INK)
-    fig.savefig(FIGURE_DIR / "mask_profiles_time.png")
-    plt.close(fig)
-
-
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--freq-ckpt", required=True)
-    p.add_argument("--time-ckpt", required=True)
     p.add_argument("--device", default=None)
     args = p.parse_args()
     device = config.get_device(args.device)
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
 
-    training_curves({"freq-swapped": 24, "time-swapped": 118})
+    training_curves(24)  # all files are used from epoch 24 on
 
     utterance = utterance_id(list_files(config.get_setup("freq-swapped"), "subset")[0])
     freq_paths = []
@@ -289,14 +237,7 @@ def main():
         freq_paths.append(f"LJSpeech_freq_swap/{utterance}.wav_vocoded_{band}.wav")
     examples("freq-swapped", args.freq_ckpt, freq_paths, "examples_freq.png", device)
 
-    time_paths = []
-    for path in list_files(config.get_setup("time-swapped"), "subset"):
-        if sf.info(str(real_path(path))).duration >= 5 and len(time_paths) < 3:
-            time_paths.append(path)
-    examples("time-swapped", args.time_ckpt, time_paths, "examples_time.png", device)
-
     mask_profiles_freq(args.freq_ckpt, device)
-    mask_profiles_time(args.time_ckpt, device)
     print(f"figures -> {FIGURE_DIR}")
 
 

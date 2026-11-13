@@ -7,7 +7,7 @@ freq-swapped setup that is 40 000 fakes (8 bands x 5 000 utterances) against
 
 Each clip goes through the pipeline's STFT -> ISTFT round trip first, because
 that is how the detector sees clips when the explanations are computed (the
-STFT crop drops the Nyquist bin and the last frame, see iSTFT_check/).
+STFT crop drops the Nyquist bin and the last frame).
 
 The utterances are split 80 / 20 (all versions of one utterance stay on the
 same side). The logistic regression is fitted on the 80 % and its accuracy is

@@ -1,0 +1,10 @@
+LJSpeech_freq_swap/LJ031-0018.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ034-0079.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ004-0029.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ019-0047.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ042-0095.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ040-0006.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ032-0214.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ023-0061.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ039-0058.wav_vocoded_1000-2000.wav
+LJSpeech_freq_swap/LJ028-0436.wav_vocoded_1000-2000.wav
